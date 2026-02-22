@@ -89,11 +89,11 @@ async function main() {
 
   const update = await api(
     "PUT",
-    `/api/merchants/${MERCHANT_ID}`,
+    "/api/merchants/me",
     { business_name: "Integration Test Store" },
     TOKEN
   );
-  log("PUT /api/merchants/:id returns 200", update.status === 200);
+  log("PUT /api/merchants/me returns 200", update.status === 200);
   log(
     "Business name updated",
     update.data.merchant?.business_name === "Integration Test Store"
@@ -148,9 +148,10 @@ async function main() {
     {
       customer_email: "test@example.com",
       items: [
-        { description: "Widget A", quantity: 2, unit_price: 10000 },
-        { description: "Widget B", quantity: 1, unit_price: 25000 },
+        { description: "Widget A", quantity: 2, unit_price_satoshis: 10000 },
+        { description: "Widget B", quantity: 1, unit_price_satoshis: 25000 },
       ],
+      total_satoshis: 45000,
       due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     },
     TOKEN
@@ -294,7 +295,7 @@ async function main() {
 
   const registerDevice = await api(
     "POST",
-    "/api/devices/register",
+    "/api/devices",
     {
       device_token: "test-fcm-token-12345",
       platform: "ANDROID",
@@ -302,7 +303,7 @@ async function main() {
     TOKEN
   );
   log(
-    "POST /api/devices/register returns 200/201",
+    "POST /api/devices returns 200/201",
     registerDevice.status === 200 || registerDevice.status === 201
   );
 
