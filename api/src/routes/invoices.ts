@@ -62,7 +62,7 @@ invoices.post("/", authMiddleware, async (c) => {
     data: {
       merchant_id: merchantId,
       customer_email: customer_email ?? null,
-      items: JSON.stringify(items),
+      items: items as any,
       total_satoshis: BigInt(total_satoshis),
       due_date: due_date ? new Date(due_date) : null,
     },
@@ -349,8 +349,7 @@ function serializeInvoice(inv: Record<string, unknown>) {
   return {
     ...inv,
     total_satoshis: inv.total_satoshis?.toString(),
-    items:
-      typeof inv.items === "string" ? JSON.parse(inv.items as string) : inv.items,
+    items: inv.items,
   };
 }
 

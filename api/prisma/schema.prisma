@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -74,7 +74,7 @@ model Invoice {
   id             String        @id @default(cuid())
   merchant_id    String
   customer_email String?
-  items          String        // JSON stored as text for SQLite
+  items          Json
   total_satoshis BigInt
   status         InvoiceStatus @default(DRAFT)
   due_date       DateTime?
@@ -129,7 +129,7 @@ model Webhook {
   id              String        @id @default(cuid())
   merchant_id     String
   event_type      String
-  payload         String        // JSON stored as text for SQLite
+  payload         Json
   status          WebhookStatus @default(PENDING)
   attempts        Int           @default(0)
   last_attempt_at DateTime?
@@ -145,7 +145,7 @@ model ApiKey {
   merchant_id String
   key_hash    String
   label       String
-  permissions String    // JSON stored as text for SQLite
+  permissions Json
   last_used_at DateTime?
   active      Boolean   @default(true)
   created_at  DateTime  @default(now())

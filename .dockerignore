@@ -1,11 +1,13 @@
 node_modules
 dist
-.env
+.git
 *.db
 *.db-journal
-.git
+mobile
+web
+contracts
+shared
 pnpm-lock.yaml
 pnpm-workspace.yaml
 turbo.json
-.npmrc
-.pnpmfile.cjs
+.env

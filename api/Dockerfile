@@ -1,31 +1,45 @@
 FROM node:20-slim AS base
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
-RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Disable corepack so it never tries to find pnpm
+RUN corepack disable 2>/dev/null || true
+ENV COREPACK_ENABLE_STRICT=0
+
 WORKDIR /app
 
 # Install dependencies
-COPY package.json pnpm-lock.yaml* ./
-COPY prisma ./prisma/
-RUN pnpm install --frozen-lockfile || pnpm install
+COPY package.json ./
+RUN npm install
 
-# Generate Prisma client
-RUN pnpm db:generate
+# Copy prisma and generate client
+COPY prisma ./prisma/
+RUN node node_modules/prisma/build/index.js generate
 
 # Copy source and build
 COPY . .
-RUN pnpm build
+# Remove any pnpm artifacts that may have leaked in
+RUN rm -f pnpm-lock.yaml pnpm-workspace.yaml .npmrc
+RUN npm run build
 
 # Production image
 FROM node:20-slim AS production
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
+# Disable corepack in production too
+RUN corepack disable 2>/dev/null || true
+ENV COREPACK_ENABLE_STRICT=0
+
 WORKDIR /app
 
 COPY --from=base /app/dist ./dist
 COPY --from=base /app/node_modules ./node_modules
-COPY --from=base /app/package.json ./
 COPY --from=base /app/prisma ./prisma
+
+# Clean package.json — no packageManager field
+RUN echo '{"name":"bch-pay-api","type":"module"}' > package.json
 
 ENV NODE_ENV=production
 EXPOSE 3456
 
-CMD ["sh", "-c", "npx prisma db push --skip-generate && node dist/index.js"]
+# Use prisma binary directly — zero dependency on any package manager
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js db push --skip-generate && node dist/index.js"]

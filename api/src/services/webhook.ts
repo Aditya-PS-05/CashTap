@@ -28,7 +28,7 @@ class WebhookService {
       data: {
         merchant_id: merchantId,
         event_type: eventType,
-        payload: JSON.stringify(payload),
+        payload: payload as any,
         status: "PENDING",
         attempts: 0,
       },

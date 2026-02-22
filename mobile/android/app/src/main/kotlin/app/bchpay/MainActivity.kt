@@ -1,4 +1,4 @@
-package com.crosslearn.crosslearn
+package app.bchpay
 
 import io.flutter.embedding.android.FlutterActivity
 
