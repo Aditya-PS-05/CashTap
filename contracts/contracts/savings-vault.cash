@@ -1,0 +1,39 @@
+// SPDX-License-Identifier: MIT
+// BCH Pay — Savings Vault (Time-Locked) Contract
+//
+// Locks BCH until a specified block height or timestamp.
+// Only the owner can withdraw after the lock period expires.
+// Uses tx.time (OP_CHECKLOCKTIMEVERIFY) for trustless time-locking.
+//
+// Use cases:
+//   - Merchant sets aside a portion of revenue automatically
+//   - Personal savings with enforced lock period
+//   - Scheduled payouts that cannot be withdrawn early
+//
+// Parameters:
+//   ownerPkh (bytes20) — HASH160 of the owner's public key
+//   locktime (int)     — Block height or UNIX timestamp after which withdrawal is allowed.
+//                         Values < 500_000_000 are interpreted as block heights.
+//                         Values >= 500_000_000 are interpreted as UNIX timestamps.
+
+pragma cashscript ^0.12.0;
+
+contract SavingsVault(bytes20 ownerPkh, int locktime) {
+
+    // Withdraw locked funds after the timelock expires.
+    // Only the owner (matching ownerPkh) can call this.
+    function withdraw(pubkey ownerPk, sig ownerSig) {
+        // Verify the caller is the owner
+        require(hash160(ownerPk) == ownerPkh);
+        require(checkSig(ownerSig, ownerPk));
+
+        // Enforce that the timelock has expired.
+        // tx.time maps to OP_CHECKLOCKTIMEVERIFY in the compiled script.
+        // The transaction's nLockTime must be >= locktime for this to pass.
+        require(tx.time >= locktime);
+
+        // Enforce that the first output pays back to the owner
+        bytes25 ownerLock = new LockingBytecodeP2PKH(ownerPkh);
+        require(tx.outputs[0].lockingBytecode == ownerLock);
+    }
+}

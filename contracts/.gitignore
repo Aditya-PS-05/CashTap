@@ -1,0 +1,6 @@
+node_modules/
+dist/
+artifacts/*.json
+!artifacts/.gitkeep
+.env
+.env.local

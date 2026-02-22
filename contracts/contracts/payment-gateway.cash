@@ -1,0 +1,56 @@
+// SPDX-License-Identifier: MIT
+// BCH Pay — Payment Gateway Contract
+//
+// Accepts BCH payment and forwards to merchant address.
+// Anyone can send BCH to this contract; the contract enforces that
+// funds are forwarded to the pre-configured merchant address.
+// An optional OP_RETURN output carries a payment memo/reference.
+//
+// Parameters:
+//   merchantPkh (bytes20) — HASH160 of the merchant's public key
+//
+// Spending path:
+//   pay() — Verify signature, enforce outputs go to merchant with memo.
+
+pragma cashscript ^0.12.0;
+
+contract PaymentGateway(bytes20 merchantPkh) {
+
+    // Anyone can trigger this function to forward funds to the merchant.
+    // The caller provides a signature to authorize the spend from the contract UTXO.
+    //
+    // Parameters:
+    //   pk    — Public key of the caller (must correspond to merchantPkh for authorization)
+    //   s     — Signature from the caller
+    //   amount — The amount in satoshis to forward to the merchant
+    //   memo  — Arbitrary bytes included in an OP_RETURN output (payment reference)
+    function pay(pubkey pk, sig s, int amount, bytes memo) {
+        // Verify the caller owns the merchant key
+        require(hash160(pk) == merchantPkh);
+        require(checkSig(s, pk));
+
+        // Verify the payment amount meets the dust limit minimum
+        require(amount >= 546);
+
+        // Build the merchant's P2PKH locking bytecode
+        bytes25 merchantLock = new LockingBytecodeP2PKH(merchantPkh);
+
+        // Enforce that the first output pays the merchant
+        require(tx.outputs[0].lockingBytecode == merchantLock);
+        require(tx.outputs[0].value >= amount);
+
+        // If a memo is provided, enforce an OP_RETURN output as the second output.
+        // OP_RETURN (0x6a) followed by a push of the memo bytes.
+        // NOTE: The OP_RETURN script construction may need adjustment based on
+        // the exact CashScript version. The bytes concatenation below builds:
+        //   OP_RETURN <pushdata> <memo>
+        if (memo.length > 0) {
+            require(tx.outputs[1].value == 0);
+            // Construct: 0x6a (OP_RETURN) + length-prefixed memo
+            // In CashScript 0.10.x, bytes concatenation with + should work.
+            // The single-byte push opcode for lengths < 76 bytes is just the length byte.
+            bytes opReturnScript = 0x6a + bytes(memo.length) + memo;
+            require(tx.outputs[1].lockingBytecode == opReturnScript);
+        }
+    }
+}

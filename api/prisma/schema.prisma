@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Merchant {
+  id           String   @id @default(cuid())
+  bch_address  String   @unique
+  business_name String
+  email        String?
+  logo_url     String?
+  api_key_hash String?
+  webhook_url  String?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  payment_links     PaymentLink[]
+  invoices          Invoice[]
+  transactions      Transaction[]
+  webhooks          Webhook[]
+  api_keys          ApiKey[]
+  devices           Device[]
+  cashtoken_configs CashtokenConfig[]
+
+  @@map("merchants")
+}
+
+enum PaymentLinkType {
+  SINGLE
+  MULTI
+}
+
+enum PaymentLinkStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+}
+
+model PaymentLink {
+  id               String            @id @default(cuid())
+  merchant_id      String
+  amount_satoshis  BigInt
+  currency         String            @default("BCH")
+  memo             String?
+  type             PaymentLinkType   @default(SINGLE)
+  status           PaymentLinkStatus @default(ACTIVE)
+  slug             String            @unique
+  payment_address  String?
+  derivation_index Int?
+  expires_at       DateTime?
+  created_at       DateTime          @default(now())
+
+  merchant     Merchant      @relation(fields: [merchant_id], references: [id])
+  transactions Transaction[]
+
+  @@index([merchant_id])
+  @@index([slug])
+  @@map("payment_links")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  VIEWED
+  PAID
+  OVERDUE
+}
+
+model Invoice {
+  id             String        @id @default(cuid())
+  merchant_id    String
+  customer_email String?
+  items          String        // JSON stored as text for SQLite
+  total_satoshis BigInt
+  status         InvoiceStatus @default(DRAFT)
+  due_date       DateTime?
+  paid_at        DateTime?
+  created_at     DateTime      @default(now())
+
+  merchant     Merchant      @relation(fields: [merchant_id], references: [id])
+  transactions Transaction[]
+
+  @@index([merchant_id])
+  @@map("invoices")
+}
+
+enum TransactionStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+model Transaction {
+  id                String            @id @default(cuid())
+  tx_hash           String            @unique
+  payment_link_id   String?
+  invoice_id        String?
+  merchant_id       String
+  sender_address    String
+  recipient_address String
+  amount_satoshis   BigInt
+  confirmations     Int               @default(0)
+  status            TransactionStatus @default(PENDING)
+  block_height      Int?
+  token_category    String?
+  created_at        DateTime          @default(now())
+
+  merchant     Merchant     @relation(fields: [merchant_id], references: [id])
+  payment_link PaymentLink? @relation(fields: [payment_link_id], references: [id])
+  invoice      Invoice?     @relation(fields: [invoice_id], references: [id])
+
+  @@index([merchant_id])
+  @@index([payment_link_id])
+  @@index([invoice_id])
+  @@map("transactions")
+}
+
+enum WebhookStatus {
+  PENDING
+  DELIVERED
+  FAILED
+}
+
+model Webhook {
+  id              String        @id @default(cuid())
+  merchant_id     String
+  event_type      String
+  payload         String        // JSON stored as text for SQLite
+  status          WebhookStatus @default(PENDING)
+  attempts        Int           @default(0)
+  last_attempt_at DateTime?
+
+  merchant Merchant @relation(fields: [merchant_id], references: [id])
+
+  @@index([merchant_id])
+  @@map("webhooks")
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  merchant_id String
+  key_hash    String
+  label       String
+  permissions String    // JSON stored as text for SQLite
+  last_used_at DateTime?
+  active      Boolean   @default(true)
+  created_at  DateTime  @default(now())
+
+  merchant Merchant @relation(fields: [merchant_id], references: [id])
+
+  @@index([merchant_id])
+  @@map("api_keys")
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+}
+
+model Device {
+  id           String         @id @default(cuid())
+  merchant_id  String
+  device_token String
+  platform     DevicePlatform
+  active       Boolean        @default(true)
+  created_at   DateTime       @default(now())
+
+  merchant Merchant @relation(fields: [merchant_id], references: [id])
+
+  @@index([merchant_id])
+  @@map("devices")
+}
+
+enum CashtokenPurpose {
+  LOYALTY
+  RECEIPT
+  REWARD
+}
+
+model CashtokenConfig {
+  id             String           @id @default(cuid())
+  merchant_id    String
+  token_category String
+  token_name     String
+  token_symbol   String
+  token_decimals Int              @default(0)
+  purpose        CashtokenPurpose
+  active         Boolean          @default(true)
+  created_at     DateTime         @default(now())
+
+  merchant Merchant @relation(fields: [merchant_id], references: [id])
+
+  @@index([merchant_id])
+  @@map("cashtoken_configs")
+}

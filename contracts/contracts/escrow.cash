@@ -1,0 +1,81 @@
+// SPDX-License-Identifier: MIT
+// BCH Pay — Escrow Contract
+//
+// Locks BCH between a buyer and seller with an optional arbiter for disputes.
+// Three spending paths:
+//   1. release()  — Both buyer and seller agree; funds go to seller.
+//   2. refund()   — Timeout expires; buyer can reclaim funds (OP_CHECKLOCKTIMEVERIFY).
+//   3. resolve()  — Arbiter resolves dispute; sends funds to either buyer or seller.
+//
+// Parameters:
+//   buyerPkh   (bytes20) — HASH160 of the buyer's public key
+//   sellerPkh  (bytes20) — HASH160 of the seller's public key
+//   arbiterPkh (bytes20) — HASH160 of the arbiter's public key
+//   timeout    (int)     — Block height or timestamp after which the buyer can refund
+
+pragma cashscript ^0.12.0;
+
+contract Escrow(
+    bytes20 buyerPkh,
+    bytes20 sellerPkh,
+    bytes20 arbiterPkh,
+    int timeout
+) {
+
+    // Path 1: Both parties agree — release funds to seller.
+    // Requires signatures from both the buyer and the seller.
+    function release(
+        pubkey buyerPk,
+        sig buyerSig,
+        pubkey sellerPk,
+        sig sellerSig
+    ) {
+        // Verify buyer identity and signature
+        require(hash160(buyerPk) == buyerPkh);
+        require(checkSig(buyerSig, buyerPk));
+
+        // Verify seller identity and signature
+        require(hash160(sellerPk) == sellerPkh);
+        require(checkSig(sellerSig, sellerPk));
+
+        // Enforce that the first output pays the seller
+        bytes25 sellerLock = new LockingBytecodeP2PKH(sellerPkh);
+        require(tx.outputs[0].lockingBytecode == sellerLock);
+    }
+
+    // Path 2: Timeout — refund to buyer.
+    // After the timeout period, only the buyer can reclaim the locked funds.
+    // Uses tx.time for OP_CHECKLOCKTIMEVERIFY enforcement.
+    function refund(pubkey buyerPk, sig buyerSig) {
+        // Verify buyer identity and signature
+        require(hash160(buyerPk) == buyerPkh);
+        require(checkSig(buyerSig, buyerPk));
+
+        // Enforce that the timelock has expired
+        require(tx.time >= timeout);
+
+        // Enforce that the first output refunds the buyer
+        bytes25 buyerLock = new LockingBytecodeP2PKH(buyerPkh);
+        require(tx.outputs[0].lockingBytecode == buyerLock);
+    }
+
+    // Path 3: Arbiter resolves dispute.
+    // The arbiter can send funds to either the buyer or the seller.
+    // The recipientPkh must match one of the two parties.
+    function resolve(
+        pubkey arbiterPk,
+        sig arbiterSig,
+        bytes20 recipientPkh
+    ) {
+        // Verify arbiter identity and signature
+        require(hash160(arbiterPk) == arbiterPkh);
+        require(checkSig(arbiterSig, arbiterPk));
+
+        // Ensure the recipient is one of the two parties (buyer or seller)
+        require(recipientPkh == buyerPkh || recipientPkh == sellerPkh);
+
+        // Enforce that the first output pays the chosen recipient
+        bytes25 recipientLock = new LockingBytecodeP2PKH(recipientPkh);
+        require(tx.outputs[0].lockingBytecode == recipientLock);
+    }
+}

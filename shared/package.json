@@ -1,0 +1,44 @@
+{
+  "name": "@bch-pay/shared",
+  "version": "0.1.0",
+  "description": "Shared types, utilities, constants, and API client for BCH Pay",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./types": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/types/index.js"
+    },
+    "./constants": {
+      "types": "./dist/constants/index.d.ts",
+      "import": "./dist/constants/index.js"
+    },
+    "./utils/bch": {
+      "types": "./dist/utils/bch.d.ts",
+      "import": "./dist/utils/bch.js"
+    },
+    "./utils/api-client": {
+      "types": "./dist/utils/api-client.d.ts",
+      "import": "./dist/utils/api-client.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}

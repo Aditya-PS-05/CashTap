@@ -1,0 +1,29 @@
+{
+  "name": "bch-pay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BCH Pay — Bitcoin Cash payment platform monorepo",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "dev:api": "npm run dev --workspace=api",
+    "dev:web": "npm run dev --workspace=web",
+    "build:api": "npm run build --workspace=api",
+    "build:web": "npm run build --workspace=web",
+    "build:shared": "npm run build --workspace=shared",
+    "build:contracts": "npm run compile --workspace=contracts",
+    "db:generate": "npm run db:generate --workspace=api",
+    "db:push": "npm run db:push --workspace=api",
+    "db:studio": "npm run db:studio --workspace=api",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.8.10"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

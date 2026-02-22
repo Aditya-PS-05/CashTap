@@ -1,0 +1,62 @@
+// SPDX-License-Identifier: MIT
+// BCH Pay — Split Payment Contract
+//
+// Splits a single BCH payment to multiple recipients by percentage.
+// Uses covenant introspection (tx.inputs, tx.outputs) to verify
+// that the correct amounts are sent to the correct addresses.
+//
+// Supports two recipients with configurable percentage splits.
+// The split is enforced on-chain: the transaction is only valid if
+// the outputs match the specified percentages.
+//
+// Parameters:
+//   recipient1Pkh  (bytes20) — HASH160 of recipient 1's public key
+//   recipient2Pkh  (bytes20) — HASH160 of recipient 2's public key
+//   split1Percent  (int)     — Percentage for recipient 1 (0-100)
+//   split2Percent  (int)     — Percentage for recipient 2 (0-100)
+//
+// NOTE: split1Percent + split2Percent must equal 100.
+
+pragma cashscript ^0.12.0;
+
+contract SplitPayment(
+    bytes20 recipient1Pkh,
+    bytes20 recipient2Pkh,
+    int split1Percent,
+    int split2Percent
+) {
+
+    // Execute the split payment.
+    // The caller provides a signature to authorize spending the contract UTXO.
+    // The contract verifies that outputs are correctly split between recipients.
+    function execute(pubkey pk, sig s) {
+        // Verify the caller's signature
+        require(checkSig(s, pk));
+
+        // Percentages must add up to 100
+        require(split1Percent + split2Percent == 100);
+
+        // Calculate amounts based on the input value of this contract UTXO
+        int totalValue = tx.inputs[this.activeInputIndex].value;
+        int minerFee = 1000; // Reserve 1000 satoshis for the miner fee
+        int distributable = totalValue - minerFee;
+
+        // Calculate each recipient's share
+        // Recipient 1 gets their exact percentage
+        int amount1 = distributable * split1Percent / 100;
+        // Recipient 2 gets the remainder to avoid rounding issues
+        int amount2 = distributable - amount1;
+
+        // Build locking bytecodes for both recipients
+        bytes25 lock1 = new LockingBytecodeP2PKH(recipient1Pkh);
+        bytes25 lock2 = new LockingBytecodeP2PKH(recipient2Pkh);
+
+        // Enforce output 0 goes to recipient 1 with correct amount
+        require(tx.outputs[0].lockingBytecode == lock1);
+        require(tx.outputs[0].value >= amount1);
+
+        // Enforce output 1 goes to recipient 2 with correct amount
+        require(tx.outputs[1].lockingBytecode == lock2);
+        require(tx.outputs[1].value >= amount2);
+    }
+}
