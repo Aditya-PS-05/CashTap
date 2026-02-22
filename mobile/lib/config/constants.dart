@@ -2,8 +2,8 @@ class AppConstants {
   AppConstants._();
 
   // API
-  static const String apiBaseUrl = 'https://api.bchpay.io/v1';
-  static const String wsBaseUrl = 'wss://api.bchpay.io/ws';
+  static const String apiBaseUrl = 'https://bch-pay-api-production.up.railway.app';
+  static const String wsBaseUrl = 'wss://bch-pay-api-production.up.railway.app/ws';
 
   // BCH Network
   static const String bchMainnetPrefix = 'bitcoincash:';

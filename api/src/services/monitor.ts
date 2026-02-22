@@ -26,6 +26,11 @@ interface WatchInfo {
   expectedAmount: bigint;
 }
 
+interface ContractWatchInfo {
+  contractInstanceId: string;
+  merchantId: string;
+}
+
 interface AddressCheckResult {
   received: boolean;
   txHash?: string;
@@ -41,6 +46,7 @@ interface ElectrumNotification {
 class TransactionMonitor {
   private client: ElectrumClient | null = null;
   private watchedAddresses: Map<string, WatchInfo> = new Map();
+  private watchedContracts: Map<string, ContractWatchInfo> = new Map();
   private isConnected = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
@@ -86,6 +92,9 @@ class TransactionMonitor {
 
       // Re-subscribe to all currently watched addresses after (re)connect
       for (const [address] of this.watchedAddresses) {
+        await this.subscribeToAddress(address);
+      }
+      for (const [address] of this.watchedContracts) {
         await this.subscribeToAddress(address);
       }
     } catch (err) {
@@ -181,6 +190,21 @@ class TransactionMonitor {
     this.watchedAddresses.delete(address);
   }
 
+  /**
+   * Start watching a contract P2SH address for incoming funds.
+   * When funds arrive, updates the contract instance status and delivers a webhook.
+   */
+  async watchContractAddress(
+    address: string,
+    contractInstanceId: string,
+    merchantId: string
+  ): Promise<void> {
+    this.watchedContracts.set(address, { contractInstanceId, merchantId });
+    if (this.isConnected) {
+      await this.subscribeToAddress(address);
+    }
+  }
+
   // ---------------------------------------------------------------
   // Notification handling
   // ---------------------------------------------------------------
@@ -195,19 +219,29 @@ class TransactionMonitor {
 
     // params: [address, statusHash]
     const address = data.params?.[0] as string | undefined;
-    if (!address || !this.watchedAddresses.has(address)) return;
+    if (!address) return;
 
-    console.log(`[Monitor] Status change for ${address.slice(0, 25)}...`);
+    // Handle payment link addresses
+    if (this.watchedAddresses.has(address)) {
+      console.log(`[Monitor] Status change for ${address.slice(0, 25)}...`);
+      const result = await this.checkAddress(address);
+      if (result.received && result.txHash && result.amount !== undefined) {
+        await this.processPayment(
+          address,
+          result.txHash,
+          result.amount,
+          result.confirmations || 0
+        );
+      }
+    }
 
-    // Fetch the latest transaction for this address
-    const result = await this.checkAddress(address);
-    if (result.received && result.txHash && result.amount !== undefined) {
-      await this.processPayment(
-        address,
-        result.txHash,
-        result.amount,
-        result.confirmations || 0
-      );
+    // Handle contract addresses
+    if (this.watchedContracts.has(address)) {
+      console.log(`[Monitor] Contract status change for ${address.slice(0, 25)}...`);
+      const result = await this.checkAddress(address);
+      if (result.received && result.txHash && result.amount !== undefined) {
+        await this.processContractPayment(address, result.txHash, result.amount);
+      }
     }
   }
 
@@ -395,6 +429,48 @@ class TransactionMonitor {
   }
 
   // ---------------------------------------------------------------
+  // Contract payment processing
+  // ---------------------------------------------------------------
+
+  /**
+   * Process a payment received at a contract address.
+   * Updates the contract instance and delivers a webhook.
+   */
+  private async processContractPayment(
+    address: string,
+    txHash: string,
+    amount: bigint
+  ): Promise<void> {
+    const info = this.watchedContracts.get(address);
+    if (!info) return;
+
+    try {
+      const instance = await prisma.contractInstance.findUnique({
+        where: { id: info.contractInstanceId },
+      });
+
+      if (!instance || instance.status !== "ACTIVE") return;
+
+      console.log(
+        `[Monitor] Contract ${instance.contract_type} received ${amount} sats (${txHash})`
+      );
+
+      await this.deliverWebhook(info.merchantId, "contract.funded", {
+        contract_instance_id: instance.id,
+        contract_type: instance.contract_type,
+        contract_address: address,
+        tx_hash: txHash,
+        amount_satoshis: amount.toString(),
+      });
+    } catch (err) {
+      console.error(
+        `[Monitor] processContractPayment failed for ${txHash}:`,
+        err
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------
   // Polling fallback
   // ---------------------------------------------------------------
 
@@ -416,6 +492,17 @@ class TransactionMonitor {
         }
       } catch (err) {
         console.error(`[Monitor] Poll error for ${address}:`, err);
+      }
+    }
+
+    for (const [address] of this.watchedContracts) {
+      try {
+        const result = await this.checkAddress(address);
+        if (result.received && result.txHash && result.amount !== undefined) {
+          await this.processContractPayment(address, result.txHash, result.amount);
+        }
+      } catch (err) {
+        console.error(`[Monitor] Contract poll error for ${address}:`, err);
       }
     }
   }
@@ -463,6 +550,28 @@ class TransactionMonitor {
 
     console.log(
       `[Monitor] Loaded ${activeLinks.length} active payment link(s) to watch`
+    );
+  }
+
+  /**
+   * Load all active contract instances from the database and start watching
+   * their P2SH addresses.
+   */
+  async loadActiveContracts(): Promise<void> {
+    const activeContracts = await prisma.contractInstance.findMany({
+      where: { status: "ACTIVE" },
+    });
+
+    for (const instance of activeContracts) {
+      await this.watchContractAddress(
+        instance.contract_address,
+        instance.id,
+        instance.merchant_id
+      );
+    }
+
+    console.log(
+      `[Monitor] Loaded ${activeContracts.length} active contract(s) to watch`
     );
   }
 }

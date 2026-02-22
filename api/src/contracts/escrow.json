@@ -1,0 +1,140 @@
+{
+  "contractName": "Escrow",
+  "constructorInputs": [
+    {
+      "name": "buyerPkh",
+      "type": "bytes20"
+    },
+    {
+      "name": "sellerPkh",
+      "type": "bytes20"
+    },
+    {
+      "name": "arbiterPkh",
+      "type": "bytes20"
+    },
+    {
+      "name": "timeout",
+      "type": "int"
+    }
+  ],
+  "abi": [
+    {
+      "name": "release",
+      "inputs": [
+        {
+          "name": "buyerPk",
+          "type": "pubkey"
+        },
+        {
+          "name": "buyerSig",
+          "type": "sig"
+        },
+        {
+          "name": "sellerPk",
+          "type": "pubkey"
+        },
+        {
+          "name": "sellerSig",
+          "type": "sig"
+        }
+      ]
+    },
+    {
+      "name": "refund",
+      "inputs": [
+        {
+          "name": "buyerPk",
+          "type": "pubkey"
+        },
+        {
+          "name": "buyerSig",
+          "type": "sig"
+        }
+      ]
+    },
+    {
+      "name": "resolve",
+      "inputs": [
+        {
+          "name": "arbiterPk",
+          "type": "pubkey"
+        },
+        {
+          "name": "arbiterSig",
+          "type": "sig"
+        },
+        {
+          "name": "recipientPkh",
+          "type": "bytes20"
+        }
+      ]
+    }
+  ],
+  "bytecode": "OP_4 OP_PICK OP_0 OP_NUMEQUAL OP_IF OP_5 OP_PICK OP_HASH160 OP_EQUALVERIFY OP_2ROT OP_CHECKSIGVERIFY OP_4 OP_PICK OP_HASH160 OP_OVER OP_EQUALVERIFY OP_2ROT OP_CHECKSIGVERIFY 76a914 OP_SWAP OP_CAT 88ac OP_CAT OP_0 OP_OUTPUTBYTECODE OP_EQUAL OP_NIP OP_NIP OP_NIP OP_ELSE OP_4 OP_PICK OP_1 OP_NUMEQUAL OP_IF OP_5 OP_PICK OP_HASH160 OP_OVER OP_EQUALVERIFY OP_6 OP_ROLL OP_6 OP_ROLL OP_CHECKSIGVERIFY OP_3 OP_ROLL OP_CHECKLOCKTIMEVERIFY OP_DROP 76a914 OP_SWAP OP_CAT 88ac OP_CAT OP_0 OP_OUTPUTBYTECODE OP_EQUAL OP_NIP OP_NIP OP_NIP OP_ELSE OP_4 OP_ROLL OP_2 OP_NUMEQUALVERIFY OP_4 OP_PICK OP_HASH160 OP_3 OP_ROLL OP_EQUALVERIFY OP_4 OP_ROLL OP_4 OP_ROLL OP_CHECKSIGVERIFY OP_3 OP_PICK OP_EQUAL OP_3 OP_PICK OP_ROT OP_EQUAL OP_BOOLOR OP_VERIFY 76a914 OP_ROT OP_CAT 88ac OP_CAT OP_0 OP_OUTPUTBYTECODE OP_EQUAL OP_NIP OP_ENDIF OP_ENDIF",
+  "source": "// SPDX-License-Identifier: MIT\n// BCH Pay — Escrow Contract\n//\n// Locks BCH between a buyer and seller with an optional arbiter for disputes.\n// Three spending paths:\n//   1. release()  — Both buyer and seller agree; funds go to seller.\n//   2. refund()   — Timeout expires; buyer can reclaim funds (OP_CHECKLOCKTIMEVERIFY).\n//   3. resolve()  — Arbiter resolves dispute; sends funds to either buyer or seller.\n//\n// Parameters:\n//   buyerPkh   (bytes20) — HASH160 of the buyer's public key\n//   sellerPkh  (bytes20) — HASH160 of the seller's public key\n//   arbiterPkh (bytes20) — HASH160 of the arbiter's public key\n//   timeout    (int)     — Block height or timestamp after which the buyer can refund\n\npragma cashscript ^0.12.0;\n\ncontract Escrow(\n    bytes20 buyerPkh,\n    bytes20 sellerPkh,\n    bytes20 arbiterPkh,\n    int timeout\n) {\n\n    // Path 1: Both parties agree — release funds to seller.\n    // Requires signatures from both the buyer and the seller.\n    function release(\n        pubkey buyerPk,\n        sig buyerSig,\n        pubkey sellerPk,\n        sig sellerSig\n    ) {\n        // Verify buyer identity and signature\n        require(hash160(buyerPk) == buyerPkh);\n        require(checkSig(buyerSig, buyerPk));\n\n        // Verify seller identity and signature\n        require(hash160(sellerPk) == sellerPkh);\n        require(checkSig(sellerSig, sellerPk));\n\n        // Enforce that the first output pays the seller\n        bytes25 sellerLock = new LockingBytecodeP2PKH(sellerPkh);\n        require(tx.outputs[0].lockingBytecode == sellerLock);\n    }\n\n    // Path 2: Timeout — refund to buyer.\n    // After the timeout period, only the buyer can reclaim the locked funds.\n    // Uses tx.time for OP_CHECKLOCKTIMEVERIFY enforcement.\n    function refund(pubkey buyerPk, sig buyerSig) {\n        // Verify buyer identity and signature\n        require(hash160(buyerPk) == buyerPkh);\n        require(checkSig(buyerSig, buyerPk));\n\n        // Enforce that the timelock has expired\n        require(tx.time >= timeout);\n\n        // Enforce that the first output refunds the buyer\n        bytes25 buyerLock = new LockingBytecodeP2PKH(buyerPkh);\n        require(tx.outputs[0].lockingBytecode == buyerLock);\n    }\n\n    // Path 3: Arbiter resolves dispute.\n    // The arbiter can send funds to either the buyer or the seller.\n    // The recipientPkh must match one of the two parties.\n    function resolve(\n        pubkey arbiterPk,\n        sig arbiterSig,\n        bytes20 recipientPkh\n    ) {\n        // Verify arbiter identity and signature\n        require(hash160(arbiterPk) == arbiterPkh);\n        require(checkSig(arbiterSig, arbiterPk));\n\n        // Ensure the recipient is one of the two parties (buyer or seller)\n        require(recipientPkh == buyerPkh || recipientPkh == sellerPkh);\n\n        // Enforce that the first output pays the chosen recipient\n        bytes25 recipientLock = new LockingBytecodeP2PKH(recipientPkh);\n        require(tx.outputs[0].lockingBytecode == recipientLock);\n    }\n}\n",
+  "debug": {
+    "bytecode": "5479009c635579a98871ad5479a9788871ad0376a9147c7e0288ac7e00cd87777777675479519c635579a97888567a567aad537ab1750376a9147c7e0288ac7e00cd8777777767547a529d5479a9537a88547a547aad53798753797b879b690376a9147b7e0288ac7e00cd87776868",
+    "sourceMap": "27:4:44:5;;;;;34:24:34:31;;:16::32:1;:8::46;35:25:35:42:0;:8::45:1;38:24:38:32:0;;:16::33:1;:37::46:0;:8::48:1;39:25:39:44:0;:8::47:1;42:29:42:64:0;:54::63;:29::64:1;;;43:27:43:28:0;:16::45:1;:8::61;27:4:44:5;;;;49::60::0;;;;;51:24:51:31;;:16::32:1;:36::44:0;:8::46:1;52:25:52:33:0;;:35::42;;:8::45:1;55:27:55:34:0;;:8::36:1;;58:28:58:62:0;:53::61;:28::62:1;;;59:27:59:28:0;:16::45:1;:8::60;49:4:60:5;;;;65::80::0;;;;71:24:71:33;;:16::34:1;:38::48:0;;:8::50:1;72:25:72:35:0;;:37::46;;:8::49:1;75:16:75:28:0;;:::40:1;:44::56:0;;:60::69;:44:::1;:16;:8::71;78:32:78:70:0;:57::69;:32::70:1;;;79:27:79:28:0;:16::45:1;:8::64;65:4:80:5;18:0:81:1;",
+    "logs": [],
+    "requires": [
+      {
+        "ip": 12,
+        "line": 34
+      },
+      {
+        "ip": 14,
+        "line": 35
+      },
+      {
+        "ip": 19,
+        "line": 38
+      },
+      {
+        "ip": 21,
+        "line": 39
+      },
+      {
+        "ip": 30,
+        "line": 43
+      },
+      {
+        "ip": 43,
+        "line": 51
+      },
+      {
+        "ip": 48,
+        "line": 52
+      },
+      {
+        "ip": 51,
+        "line": 55
+      },
+      {
+        "ip": 61,
+        "line": 59
+      },
+      {
+        "ip": 74,
+        "line": 71
+      },
+      {
+        "ip": 79,
+        "line": 72
+      },
+      {
+        "ip": 88,
+        "line": 75
+      },
+      {
+        "ip": 97,
+        "line": 79
+      }
+    ]
+  },
+  "compiler": {
+    "name": "cashc",
+    "version": "0.12.1"
+  },
+  "updatedAt": "2026-02-22T19:24:38.250Z"
+}

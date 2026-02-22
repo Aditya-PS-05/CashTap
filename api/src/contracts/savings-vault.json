@@ -1,0 +1,58 @@
+{
+  "contractName": "SavingsVault",
+  "constructorInputs": [
+    {
+      "name": "ownerPkh",
+      "type": "bytes20"
+    },
+    {
+      "name": "locktime",
+      "type": "int"
+    }
+  ],
+  "abi": [
+    {
+      "name": "withdraw",
+      "inputs": [
+        {
+          "name": "ownerPk",
+          "type": "pubkey"
+        },
+        {
+          "name": "ownerSig",
+          "type": "sig"
+        }
+      ]
+    }
+  ],
+  "bytecode": "OP_2 OP_PICK OP_HASH160 OP_OVER OP_EQUALVERIFY OP_2SWAP OP_CHECKSIGVERIFY OP_SWAP OP_CHECKLOCKTIMEVERIFY OP_DROP 76a914 OP_SWAP OP_CAT 88ac OP_CAT OP_0 OP_OUTPUTBYTECODE OP_EQUAL",
+  "source": "// SPDX-License-Identifier: MIT\n// BCH Pay — Savings Vault (Time-Locked) Contract\n//\n// Locks BCH until a specified block height or timestamp.\n// Only the owner can withdraw after the lock period expires.\n// Uses tx.time (OP_CHECKLOCKTIMEVERIFY) for trustless time-locking.\n//\n// Use cases:\n//   - Merchant sets aside a portion of revenue automatically\n//   - Personal savings with enforced lock period\n//   - Scheduled payouts that cannot be withdrawn early\n//\n// Parameters:\n//   ownerPkh (bytes20) — HASH160 of the owner's public key\n//   locktime (int)     — Block height or UNIX timestamp after which withdrawal is allowed.\n//                         Values < 500_000_000 are interpreted as block heights.\n//                         Values >= 500_000_000 are interpreted as UNIX timestamps.\n\npragma cashscript ^0.12.0;\n\ncontract SavingsVault(bytes20 ownerPkh, int locktime) {\n\n    // Withdraw locked funds after the timelock expires.\n    // Only the owner (matching ownerPkh) can call this.\n    function withdraw(pubkey ownerPk, sig ownerSig) {\n        // Verify the caller is the owner\n        require(hash160(ownerPk) == ownerPkh);\n        require(checkSig(ownerSig, ownerPk));\n\n        // Enforce that the timelock has expired.\n        // tx.time maps to OP_CHECKLOCKTIMEVERIFY in the compiled script.\n        // The transaction's nLockTime must be >= locktime for this to pass.\n        require(tx.time >= locktime);\n\n        // Enforce that the first output pays back to the owner\n        bytes25 ownerLock = new LockingBytecodeP2PKH(ownerPkh);\n        require(tx.outputs[0].lockingBytecode == ownerLock);\n    }\n}\n",
+  "debug": {
+    "bytecode": "5279a9788872ad7cb1750376a9147c7e0288ac7e00cd87",
+    "sourceMap": "27:24:27:31;;:16::32:1;:36::44:0;:8::46:1;28:25:28:42:0;:8::45:1;33:27:33:35:0;:8::37:1;;36:28:36:62:0;:53::61;:28::62:1;;;37:27:37:28:0;:16::45:1;:8::60",
+    "logs": [],
+    "requires": [
+      {
+        "ip": 6,
+        "line": 27
+      },
+      {
+        "ip": 8,
+        "line": 28
+      },
+      {
+        "ip": 10,
+        "line": 33
+      },
+      {
+        "ip": 20,
+        "line": 37
+      }
+    ]
+  },
+  "compiler": {
+    "name": "cashc",
+    "version": "0.12.1"
+  },
+  "updatedAt": "2026-02-22T19:24:38.263Z"
+}

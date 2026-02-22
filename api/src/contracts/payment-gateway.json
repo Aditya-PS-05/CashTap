@@ -1,0 +1,74 @@
+{
+  "contractName": "PaymentGateway",
+  "constructorInputs": [
+    {
+      "name": "merchantPkh",
+      "type": "bytes20"
+    }
+  ],
+  "abi": [
+    {
+      "name": "pay",
+      "inputs": [
+        {
+          "name": "pk",
+          "type": "pubkey"
+        },
+        {
+          "name": "s",
+          "type": "sig"
+        },
+        {
+          "name": "amount",
+          "type": "int"
+        },
+        {
+          "name": "memo",
+          "type": "bytes"
+        }
+      ]
+    }
+  ],
+  "bytecode": "OP_OVER OP_HASH160 OP_OVER OP_EQUALVERIFY OP_ROT OP_ROT OP_CHECKSIGVERIFY OP_OVER 2202 OP_GREATERTHANOREQUAL OP_VERIFY 76a914 OP_SWAP OP_CAT 88ac OP_CAT OP_0 OP_OUTPUTBYTECODE OP_EQUALVERIFY OP_0 OP_OUTPUTVALUE OP_LESSTHANOREQUAL OP_VERIFY OP_DUP OP_SIZE OP_NIP OP_0 OP_GREATERTHAN OP_IF OP_1 OP_OUTPUTVALUE OP_0 OP_NUMEQUALVERIFY 6a OP_OVER OP_SIZE OP_NIP OP_CAT OP_OVER OP_CAT OP_1 OP_OUTPUTBYTECODE OP_OVER OP_EQUALVERIFY OP_DROP OP_ENDIF OP_DROP OP_1",
+  "source": "// SPDX-License-Identifier: MIT\n// BCH Pay — Payment Gateway Contract\n//\n// Accepts BCH payment and forwards to merchant address.\n// Anyone can send BCH to this contract; the contract enforces that\n// funds are forwarded to the pre-configured merchant address.\n// An optional OP_RETURN output carries a payment memo/reference.\n//\n// Parameters:\n//   merchantPkh (bytes20) — HASH160 of the merchant's public key\n//\n// Spending path:\n//   pay() — Verify signature, enforce outputs go to merchant with memo.\n\npragma cashscript ^0.12.0;\n\ncontract PaymentGateway(bytes20 merchantPkh) {\n\n    // Anyone can trigger this function to forward funds to the merchant.\n    // The caller provides a signature to authorize the spend from the contract UTXO.\n    //\n    // Parameters:\n    //   pk    — Public key of the caller (must correspond to merchantPkh for authorization)\n    //   s     — Signature from the caller\n    //   amount — The amount in satoshis to forward to the merchant\n    //   memo  — Arbitrary bytes included in an OP_RETURN output (payment reference)\n    function pay(pubkey pk, sig s, int amount, bytes memo) {\n        // Verify the caller owns the merchant key\n        require(hash160(pk) == merchantPkh);\n        require(checkSig(s, pk));\n\n        // Verify the payment amount meets the dust limit minimum\n        require(amount >= 546);\n\n        // Build the merchant's P2PKH locking bytecode\n        bytes25 merchantLock = new LockingBytecodeP2PKH(merchantPkh);\n\n        // Enforce that the first output pays the merchant\n        require(tx.outputs[0].lockingBytecode == merchantLock);\n        require(tx.outputs[0].value >= amount);\n\n        // If a memo is provided, enforce an OP_RETURN output as the second output.\n        // OP_RETURN (0x6a) followed by a push of the memo bytes.\n        // NOTE: The OP_RETURN script construction may need adjustment based on\n        // the exact CashScript version. The bytes concatenation below builds:\n        //   OP_RETURN <pushdata> <memo>\n        if (memo.length > 0) {\n            require(tx.outputs[1].value == 0);\n            // Construct: 0x6a (OP_RETURN) + length-prefixed memo\n            // In CashScript 0.10.x, bytes concatenation with + should work.\n            // The single-byte push opcode for lengths < 76 bytes is just the length byte.\n            bytes opReturnScript = 0x6a + bytes(memo.length) + memo;\n            require(tx.outputs[1].lockingBytecode == opReturnScript);\n        }\n    }\n}\n",
+  "debug": {
+    "bytecode": "78a978887b7bad78022202a2690376a9147c7e0288ac7e00cd8800cca16976827700a06351cc009d016a7882777e787e51cd788875687551",
+    "sourceMap": "29:24:29:26;:16::27:1;:31::42:0;:8::44:1;30:25:30:26:0;:28::30;:8::33:1;33:16:33:22:0;:26::29;:16:::1;:8::31;36:31:36:68:0;:56::67;:31::68:1;;;39:27:39:28:0;:16::45:1;:8::63;40:27:40:28:0;:16::35:1;:::45;:8::47;47:12:47:16:0;:::23:1;;:26::27:0;:12:::1;:29:54:9:0;48:31:48:32;:20::39:1;:43::44:0;:12::46:1;52:35:52:39:0;:48::52;:::59:1;;:35::60;:63::67:0;:35:::1;53:31:53:32:0;:20::49:1;:53::67:0;:12::69:1;47:29:54:9;;27:4:55:5;",
+    "logs": [],
+    "requires": [
+      {
+        "ip": 4,
+        "line": 29
+      },
+      {
+        "ip": 7,
+        "line": 30
+      },
+      {
+        "ip": 11,
+        "line": 33
+      },
+      {
+        "ip": 19,
+        "line": 39
+      },
+      {
+        "ip": 23,
+        "line": 40
+      },
+      {
+        "ip": 33,
+        "line": 48
+      },
+      {
+        "ip": 44,
+        "line": 53
+      }
+    ]
+  },
+  "compiler": {
+    "name": "cashc",
+    "version": "0.12.1"
+  },
+  "updatedAt": "2026-02-22T19:24:38.229Z"
+}

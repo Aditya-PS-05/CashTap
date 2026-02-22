@@ -24,7 +24,8 @@ model Merchant {
   webhooks          Webhook[]
   api_keys          ApiKey[]
   devices           Device[]
-  cashtoken_configs CashtokenConfig[]
+  cashtoken_configs  CashtokenConfig[]
+  contract_instances ContractInstance[]
 
   @@map("merchants")
 }
@@ -196,4 +197,33 @@ model CashtokenConfig {
 
   @@index([merchant_id])
   @@map("cashtoken_configs")
+}
+
+enum ContractType {
+  ESCROW
+  SPLIT_PAYMENT
+  SAVINGS_VAULT
+}
+
+enum ContractStatus {
+  ACTIVE
+  COMPLETED
+  EXPIRED
+}
+
+model ContractInstance {
+  id               String         @id @default(cuid())
+  merchant_id      String
+  contract_type    ContractType
+  contract_address String
+  token_address    String?
+  constructor_args Json
+  status           ContractStatus @default(ACTIVE)
+  created_at       DateTime       @default(now())
+
+  merchant Merchant @relation(fields: [merchant_id], references: [id])
+
+  @@index([merchant_id])
+  @@index([contract_address])
+  @@map("contract_instances")
 }

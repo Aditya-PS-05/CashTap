@@ -9,6 +9,7 @@ import paymentLinkRoutes from "./routes/payment-links.js";
 import transactionRoutes from "./routes/transactions.js";
 import invoiceRoutes from "./routes/invoices.js";
 import deviceRoutes from "./routes/devices.js";
+import contractRoutes from "./routes/contracts.js";
 
 const app = new Hono();
 
@@ -99,6 +100,7 @@ app.route("/api/payment-links", paymentLinkRoutes);
 app.route("/api/transactions", transactionRoutes);
 app.route("/api/invoices", invoiceRoutes);
 app.route("/api/devices", deviceRoutes);
+app.route("/api/contracts", contractRoutes);
 
 // ---------------------------------------------------------------------------
 // Start server
@@ -140,6 +142,7 @@ async function initBlockchainServices() {
     const { transactionMonitor } = await import("./services/monitor.js");
     await transactionMonitor.connect();
     await transactionMonitor.loadActivePaymentLinks();
+    await transactionMonitor.loadActiveContracts();
     transactionMonitor.startPolling(10_000); // Poll every 10s as fallback
 
     console.log("[Init] Blockchain services initialized");

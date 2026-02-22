@@ -1,0 +1,74 @@
+{
+  "contractName": "SplitPayment",
+  "constructorInputs": [
+    {
+      "name": "recipient1Pkh",
+      "type": "bytes20"
+    },
+    {
+      "name": "recipient2Pkh",
+      "type": "bytes20"
+    },
+    {
+      "name": "split1Percent",
+      "type": "int"
+    },
+    {
+      "name": "split2Percent",
+      "type": "int"
+    }
+  ],
+  "abi": [
+    {
+      "name": "execute",
+      "inputs": [
+        {
+          "name": "pk",
+          "type": "pubkey"
+        },
+        {
+          "name": "s",
+          "type": "sig"
+        }
+      ]
+    }
+  ],
+  "bytecode": "OP_2ROT OP_CHECKSIGVERIFY OP_2 OP_PICK OP_4 OP_ROLL OP_ADD 64 OP_NUMEQUALVERIFY OP_INPUTINDEX OP_UTXOVALUE e803 OP_SUB OP_DUP OP_4 OP_ROLL OP_MUL 64 OP_DIV OP_SWAP OP_OVER OP_SUB 76a914 OP_3 OP_ROLL OP_CAT 88ac OP_CAT 76a914 OP_4 OP_ROLL OP_CAT 88ac OP_CAT OP_0 OP_OUTPUTBYTECODE OP_ROT OP_EQUALVERIFY OP_0 OP_OUTPUTVALUE OP_3 OP_ROLL OP_GREATERTHANOREQUAL OP_VERIFY OP_1 OP_OUTPUTBYTECODE OP_EQUALVERIFY OP_1 OP_OUTPUTVALUE OP_LESSTHANOREQUAL",
+  "source": "// SPDX-License-Identifier: MIT\n// BCH Pay — Split Payment Contract\n//\n// Splits a single BCH payment to multiple recipients by percentage.\n// Uses covenant introspection (tx.inputs, tx.outputs) to verify\n// that the correct amounts are sent to the correct addresses.\n//\n// Supports two recipients with configurable percentage splits.\n// The split is enforced on-chain: the transaction is only valid if\n// the outputs match the specified percentages.\n//\n// Parameters:\n//   recipient1Pkh  (bytes20) — HASH160 of recipient 1's public key\n//   recipient2Pkh  (bytes20) — HASH160 of recipient 2's public key\n//   split1Percent  (int)     — Percentage for recipient 1 (0-100)\n//   split2Percent  (int)     — Percentage for recipient 2 (0-100)\n//\n// NOTE: split1Percent + split2Percent must equal 100.\n\npragma cashscript ^0.12.0;\n\ncontract SplitPayment(\n    bytes20 recipient1Pkh,\n    bytes20 recipient2Pkh,\n    int split1Percent,\n    int split2Percent\n) {\n\n    // Execute the split payment.\n    // The caller provides a signature to authorize spending the contract UTXO.\n    // The contract verifies that outputs are correctly split between recipients.\n    function execute(pubkey pk, sig s) {\n        // Verify the caller's signature\n        require(checkSig(s, pk));\n\n        // Percentages must add up to 100\n        require(split1Percent + split2Percent == 100);\n\n        // Calculate amounts based on the input value of this contract UTXO\n        int totalValue = tx.inputs[this.activeInputIndex].value;\n        int minerFee = 1000; // Reserve 1000 satoshis for the miner fee\n        int distributable = totalValue - minerFee;\n\n        // Calculate each recipient's share\n        // Recipient 1 gets their exact percentage\n        int amount1 = distributable * split1Percent / 100;\n        // Recipient 2 gets the remainder to avoid rounding issues\n        int amount2 = distributable - amount1;\n\n        // Build locking bytecodes for both recipients\n        bytes25 lock1 = new LockingBytecodeP2PKH(recipient1Pkh);\n        bytes25 lock2 = new LockingBytecodeP2PKH(recipient2Pkh);\n\n        // Enforce output 0 goes to recipient 1 with correct amount\n        require(tx.outputs[0].lockingBytecode == lock1);\n        require(tx.outputs[0].value >= amount1);\n\n        // Enforce output 1 goes to recipient 2 with correct amount\n        require(tx.outputs[1].lockingBytecode == lock2);\n        require(tx.outputs[1].value >= amount2);\n    }\n}\n",
+  "debug": {
+    "bytecode": "71ad5279547a9301649dc0c602e8039476547a950164967c78940376a914537a7e0288ac7e0376a914547a7e0288ac7e00cd7b8800cc537aa26951cd8851cca1",
+    "sourceMap": "34:25:34:30;:8::33:1;37:16:37:29:0;;:32::45;;:16:::1;:49::52:0;:8::54:1;40:35:40:56:0;:25::63:1;41:23:41:27:0;42:28:42:49:1;46:22:46:35:0;:38::51;;:22:::1;:54::57:0;:22:::1;48::48:35:0;:38::45;:22:::1;51:24:51:63:0;:49::62;;:24::63:1;;;52::52::0;:49::62;;:24::63:1;;;55:27:55:28:0;:16::45:1;:49::54:0;:8::56:1;56:27:56:28:0;:16::35:1;:39::46:0;;:16:::1;:8::48;59:27:59:28:0;:16::45:1;:8::56;60:27:60:28:0;:16::35:1;:8::48",
+    "logs": [],
+    "requires": [
+      {
+        "ip": 5,
+        "line": 34
+      },
+      {
+        "ip": 12,
+        "line": 37
+      },
+      {
+        "ip": 41,
+        "line": 55
+      },
+      {
+        "ip": 47,
+        "line": 56
+      },
+      {
+        "ip": 50,
+        "line": 59
+      },
+      {
+        "ip": 54,
+        "line": 60
+      }
+    ]
+  },
+  "compiler": {
+    "name": "cashc",
+    "version": "0.12.1"
+  },
+  "updatedAt": "2026-02-22T19:24:38.260Z"
+}

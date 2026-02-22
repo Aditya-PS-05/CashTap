@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Zap, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
 
 export default function OnboardingPage() {
   const router = useRouter();

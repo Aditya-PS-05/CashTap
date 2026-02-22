@@ -8,13 +8,15 @@
     "deploy": "tsx src/deploy.ts",
     "deploy:dry": "tsx src/deploy.ts --dry-run",
     "interact": "tsx src/interact.ts",
+    "copy:api": "cp artifacts/*.json ../api/src/contracts/",
     "build": "tsc --noEmit",
     "test": "tsx src/test-contracts.ts"
   },
   "dependencies": {
     "@cashscript/utils": "^0.10.0",
     "cashc": "^0.12.1",
-    "cashscript": "^0.10.0"
+    "cashscript": "^0.10.0",
+    "dotenv": "^17.3.1"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
