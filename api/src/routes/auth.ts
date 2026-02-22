@@ -29,7 +29,7 @@ const challengeSchema = z.object({
     .string()
     .min(1, "BCH address is required")
     .regex(
-      /^(bitcoincash:)?[qp][a-z0-9]{41}$/i,
+      /^(bitcoincash:|bchtest:)?[qpzrs][a-z0-9]{41,}$/i,
       "Invalid BCH address format"
     ),
 });

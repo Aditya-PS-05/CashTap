@@ -1,6 +1,7 @@
 {
   "name": "bch-pay-api",
   "version": "1.0.0",
+  "type": "module",
   "description": "BCH Pay — Bitcoin Cash payment platform API",
   "scripts": {
     "dev": "tsx watch src/index.ts",
