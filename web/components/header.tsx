@@ -47,7 +47,7 @@ export function Header() {
         const session = await sessionRes.json();
         if (!session.accessToken) return;
 
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://cashtap-api-production.up.railway.app";
         es = new EventSource(`${apiBase}/api/events?token=${session.accessToken}`);
         eventSourceRef.current = es;
 

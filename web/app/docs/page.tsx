@@ -7,7 +7,7 @@ export default function DocsPage() {
       <div>
         <h1 className="text-4xl font-bold">Developer Documentation</h1>
         <p className="text-lg text-muted-foreground mt-2">
-          Everything you need to integrate BCH Pay into your application.
+          Everything you need to integrate CashTap into your application.
         </p>
       </div>
       <div className="grid gap-6 md:grid-cols-2">

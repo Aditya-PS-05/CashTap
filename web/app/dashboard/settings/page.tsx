@@ -1,16 +1,25 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Key, Plus, Trash2, Webhook, DollarSign } from "lucide-react";
+import { Copy, Key, Plus, Trash2, Webhook, DollarSign, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { usePrice } from "@/lib/price-context";
+import { apiFetch } from "@/lib/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
+interface MerchantProfile {
+  id: string;
+  bch_address: string;
+  business_name: string;
+  email: string;
+  logo_url: string | null;
+  webhook_url: string | null;
+  display_currency: string | null;
+}
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -18,10 +27,39 @@ export default function SettingsPage() {
   const [loyaltyEnabled, setLoyaltyEnabled] = useState(false);
   const [receiptsEnabled, setReceiptsEnabled] = useState(false);
   const [loadingTokens, setLoadingTokens] = useState(true);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savingWebhook, setSavingWebhook] = useState(false);
+
+  // Profile form state
+  const [businessName, setBusinessName] = useState("");
+  const [email, setEmail] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [bchAddress, setBchAddress] = useState("");
+  const [webhookUrl, setWebhookUrl] = useState("");
+
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://cashtap-api-production.up.railway.app";
+
+  const fetchProfile = useCallback(async () => {
+    try {
+      const data = await apiFetch<{ merchant: MerchantProfile }>("/api/merchants/me");
+      const m = data.merchant;
+      setBusinessName(m.business_name || "");
+      setEmail(m.email || "");
+      setLogoUrl(m.logo_url || "");
+      setBchAddress(m.bch_address || "");
+      setWebhookUrl(m.webhook_url || "");
+    } catch {
+      // Profile not available
+    } finally {
+      setLoadingProfile(false);
+    }
+  }, []);
 
   useEffect(() => {
+    fetchProfile();
     fetchTokenStatus();
-  }, []);
+  }, [fetchProfile]);
 
   async function getAuthToken(): Promise<string | null> {
     try {
@@ -89,6 +127,42 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleSaveProfile() {
+    setSaving(true);
+    try {
+      await apiFetch("/api/merchants/me", {
+        method: "PUT",
+        body: JSON.stringify({
+          business_name: businessName,
+          email,
+          logo_url: logoUrl || null,
+        }),
+      });
+      toast.success("Profile saved!");
+    } catch {
+      toast.error("Failed to save profile");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSaveWebhook() {
+    setSavingWebhook(true);
+    try {
+      await apiFetch("/api/merchants/me", {
+        method: "PUT",
+        body: JSON.stringify({
+          webhook_url: webhookUrl || null,
+        }),
+      });
+      toast.success("Webhook URL saved!");
+    } catch {
+      toast.error("Failed to save webhook");
+    } finally {
+      setSavingWebhook(false);
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
@@ -103,19 +177,45 @@ export default function SettingsPage() {
           <CardDescription>Your business information displayed to customers.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div>
-            <label className="text-sm font-medium">Business Name</label>
-            <Input defaultValue="Coffee Shop BCH" className="mt-1" />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Email</label>
-            <Input type="email" defaultValue="merchant@coffeeshop.com" className="mt-1" />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Logo URL</label>
-            <Input defaultValue="https://example.com/logo.png" className="mt-1" />
-          </div>
-          <Button size="sm">Save Changes</Button>
+          {loadingProfile ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="text-sm font-medium">Business Name</label>
+                <Input
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  placeholder="Your business name"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Email</label>
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="merchant@example.com"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Logo URL</label>
+                <Input
+                  value={logoUrl}
+                  onChange={(e) => setLogoUrl(e.target.value)}
+                  placeholder="https://example.com/logo.png"
+                  className="mt-1"
+                />
+              </div>
+              <Button size="sm" onClick={handleSaveProfile} disabled={saving}>
+                {saving ? "Saving..." : "Save Changes"}
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -126,28 +226,34 @@ export default function SettingsPage() {
           <CardDescription>Your connected BCH wallet address.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex items-center gap-2 rounded-md bg-muted p-3">
-            <code className="text-xs flex-1 break-all">bitcoincash:qzm3abc123def456ghi789jkl012mno345</code>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 shrink-0"
-              onClick={() => {
-                navigator.clipboard.writeText("bitcoincash:qzm3abc123def456ghi789jkl012mno345");
-                toast.success("Address copied!");
-              }}
-            >
-              <Copy className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Balance</span>
-            <span className="font-medium">3.456 BCH ($1,183.00)</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Network</span>
-            <Badge variant="outline" className="text-xs">Chipnet (Testnet)</Badge>
-          </div>
+          {loadingProfile ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : bchAddress ? (
+            <>
+              <div className="flex items-center gap-2 rounded-md bg-muted p-3">
+                <code className="text-xs flex-1 break-all">{bchAddress}</code>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => {
+                    navigator.clipboard.writeText(bchAddress);
+                    toast.success("Address copied!");
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Network</span>
+                <Badge variant="outline" className="text-xs">Chipnet (Testnet)</Badge>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">No wallet address configured.</p>
+          )}
         </CardContent>
       </Card>
 
@@ -263,14 +369,21 @@ export default function SettingsPage() {
         <CardContent className="space-y-4">
           <div>
             <label className="text-sm font-medium">Webhook URL</label>
-            <Input placeholder="https://yoursite.com/api/bch-webhook" className="mt-1" />
+            <Input
+              placeholder="https://yoursite.com/api/bch-webhook"
+              className="mt-1"
+              value={webhookUrl}
+              onChange={(e) => setWebhookUrl(e.target.value)}
+            />
           </div>
           <div className="text-xs text-muted-foreground space-y-1">
             <p>Events: <code>payment.received</code>, <code>payment.confirmed</code>, <code>invoice.paid</code></p>
             <p>Webhooks are signed with HMAC-SHA256 for verification.</p>
           </div>
           <div className="flex gap-2">
-            <Button size="sm">Save</Button>
+            <Button size="sm" onClick={handleSaveWebhook} disabled={savingWebhook}>
+              {savingWebhook ? "Saving..." : "Save"}
+            </Button>
             <Button size="sm" variant="outline">Send Test</Button>
           </div>
         </CardContent>
@@ -288,7 +401,7 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between rounded-md bg-muted p-3">
             <div>
               <p className="text-sm font-medium">Production Key</p>
-              <code className="text-xs text-muted-foreground">bchpay_sk_...x4f2</code>
+              <code className="text-xs text-muted-foreground">cashtap_sk_...x4f2</code>
             </div>
             <div className="flex gap-1">
               <Badge variant="success" className="text-xs">Active</Badge>

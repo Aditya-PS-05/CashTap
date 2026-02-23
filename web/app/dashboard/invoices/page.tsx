@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,9 +14,11 @@ import {
   DialogTrigger,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Plus, Send, Eye, Trash2, Mail } from "lucide-react";
+import { Plus, Send, Eye, Trash2, Mail, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { InvoiceDetail } from "@/components/invoice-detail";
+import { apiFetch } from "@/lib/api";
+import { usePrice } from "@/lib/price-context";
 
 interface LineItem {
   desc: string;
@@ -39,33 +41,18 @@ interface Invoice {
   taxRate?: number;
 }
 
-const mockInvoices: Invoice[] = [
-  {
-    id: "1", number: "INV-001", customerEmail: "alice@example.com", totalBch: "0.5845", totalUsd: "$200.00", status: "PAID", dueDate: "Feb 25", created: "Feb 18",
-    items: [{ description: "Logo Design", quantity: 1, unitPrice: 200.00 }],
-  },
-  {
-    id: "2", number: "INV-002", customerEmail: "bob@example.com", totalBch: "1.4613", totalUsd: "$500.00", status: "SENT", dueDate: "Feb 28", created: "Feb 20",
-    items: [
-      { description: "Web Design Service", quantity: 1, unitPrice: 350.00 },
-      { description: "Hosting Setup", quantity: 1, unitPrice: 100.00 },
-      { description: "Domain Registration", quantity: 2, unitPrice: 25.00 },
-    ],
-    notes: "Payment due within 7 days. Thank you for your business!",
-  },
-  {
-    id: "3", number: "INV-003", customerEmail: "carol@example.com", totalBch: "0.2923", totalUsd: "$100.00", status: "VIEWED", dueDate: "Mar 1", created: "Feb 21",
-    items: [{ description: "Consultation", quantity: 2, unitPrice: 50.00 }],
-  },
-  {
-    id: "4", number: "INV-004", customerEmail: "dave@example.com", totalBch: "0.1461", totalUsd: "$50.00", status: "DRAFT", dueDate: "Mar 5", created: "Feb 22",
-    items: [{ description: "Support Package", quantity: 1, unitPrice: 50.00 }],
-  },
-  {
-    id: "5", number: "INV-005", customerEmail: "eve@example.com", totalBch: "0.4384", totalUsd: "$150.00", status: "OVERDUE", dueDate: "Feb 15", created: "Feb 10",
-    items: [{ description: "Monthly Retainer", quantity: 1, unitPrice: 150.00 }],
-  },
-];
+interface ApiInvoice {
+  id: string;
+  customer_email: string | null;
+  items: { description: string; quantity: number; unit_price_satoshis: number }[];
+  total_satoshis: string;
+  status: "DRAFT" | "SENT" | "VIEWED" | "PAID" | "OVERDUE";
+  due_date: string | null;
+  paid_at: string | null;
+  created_at: string;
+  notes?: string;
+  merchant?: { bch_address?: string };
+}
 
 const statusColors = {
   DRAFT: "secondary" as const,
@@ -81,6 +68,64 @@ export default function InvoicesPage() {
   const [taxRate, setTaxRate] = useState("");
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [notes, setNotes] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+
+  const { bchUsd } = usePrice();
+
+  const fetchInvoices = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await apiFetch<{
+        invoices: ApiInvoice[];
+        pagination: { page: number; limit: number; total: number; pages: number };
+      }>(`/api/invoices?page=${page}&limit=20`);
+
+      const mapped: Invoice[] = data.invoices.map((inv, idx) => {
+        const totalSats = Number(inv.total_satoshis);
+        const totalBch = totalSats / 1e8;
+        const totalUsd = bchUsd > 0 ? totalBch * bchUsd : 0;
+
+        return {
+          id: inv.id,
+          number: `INV-${String(idx + 1 + (page - 1) * 20).padStart(3, "0")}`,
+          customerEmail: inv.customer_email || "—",
+          totalBch: totalBch.toFixed(8),
+          totalUsd: `$${totalUsd.toFixed(2)}`,
+          status: inv.status,
+          dueDate: inv.due_date
+            ? new Date(inv.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+            : "—",
+          created: new Date(inv.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+          items: inv.items?.map((item) => ({
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: bchUsd > 0 ? (item.unit_price_satoshis / 1e8) * bchUsd : item.unit_price_satoshis / 1e8,
+          })),
+          notes: inv.notes,
+          address: inv.merchant?.bch_address,
+        };
+      });
+
+      setInvoices(mapped);
+      setTotalPages(data.pagination.pages);
+    } catch {
+      toast.error("Failed to load invoices");
+    } finally {
+      setLoading(false);
+    }
+  }, [page, bchUsd]);
+
+  useEffect(() => {
+    fetchInvoices();
+  }, [fetchInvoices]);
 
   const addItem = () => setItems([...items, { desc: "", qty: 1, price: "" }]);
   const removeItem = (i: number) => setItems(items.filter((_, idx) => idx !== i));
@@ -100,6 +145,68 @@ export default function InvoicesPage() {
   const openDetail = (inv: Invoice) => {
     setSelectedInvoice(inv);
     setDetailOpen(true);
+  };
+
+  const handleCreateInvoice = async (e: React.FormEvent, send: boolean) => {
+    e.preventDefault();
+    if (!customerEmail) {
+      toast.error("Customer email is required");
+      return;
+    }
+    if (items.some((item) => !item.desc || !item.price)) {
+      toast.error("Please fill in all line items");
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const totalUsd = total;
+      const totalSatoshis = bchUsd > 0 ? Math.round((totalUsd / bchUsd) * 1e8) : 0;
+
+      await apiFetch("/api/invoices", {
+        method: "POST",
+        body: JSON.stringify({
+          customer_email: customerEmail,
+          items: items.map((item) => {
+            const priceUsd = parseFloat(item.price) || 0;
+            const priceSats = bchUsd > 0 ? Math.round((priceUsd / bchUsd) * 1e8) : 0;
+            return {
+              description: item.desc,
+              quantity: item.qty,
+              unit_price_satoshis: priceSats,
+            };
+          }),
+          total_satoshis: totalSatoshis,
+          due_date: dueDate || null,
+          notes: notes || null,
+          status: send ? "SENT" : "DRAFT",
+        }),
+      });
+
+      toast.success(send ? "Invoice created and sent!" : "Invoice saved as draft!");
+      setOpen(false);
+      setItems([{ desc: "", qty: 1, price: "" }]);
+      setTaxRate("");
+      setCustomerEmail("");
+      setDueDate("");
+      setNotes("");
+      fetchInvoices();
+    } catch {
+      toast.error("Failed to create invoice");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleSendInvoice = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await apiFetch(`/api/invoices/${id}/send`, { method: "POST" });
+      toast.success("Invoice sent!");
+      fetchInvoices();
+    } catch {
+      toast.error("Failed to send invoice");
+    }
   };
 
   return (
@@ -122,17 +229,17 @@ export default function InvoicesPage() {
             </DialogHeader>
             <form
               className="space-y-4"
-              onSubmit={(e) => {
-                e.preventDefault();
-                toast.success("Invoice created!");
-                setOpen(false);
-                setItems([{ desc: "", qty: 1, price: "" }]);
-                setTaxRate("");
-              }}
+              onSubmit={(e) => handleCreateInvoice(e, false)}
             >
               <div>
                 <label className="text-sm font-medium">Customer Email</label>
-                <Input type="email" placeholder="customer@example.com" className="mt-1" />
+                <Input
+                  type="email"
+                  placeholder="customer@example.com"
+                  className="mt-1"
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                />
               </div>
 
               <div>
@@ -208,17 +315,34 @@ export default function InvoicesPage() {
 
               <div>
                 <label className="text-sm font-medium">Due Date</label>
-                <Input type="date" className="mt-1" />
+                <Input
+                  type="date"
+                  className="mt-1"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                />
               </div>
 
               <div>
                 <label className="text-sm font-medium">Notes</label>
-                <Textarea placeholder="Payment terms, thank you message..." className="mt-1" />
+                <Textarea
+                  placeholder="Payment terms, thank you message..."
+                  className="mt-1"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
               </div>
 
               <div className="flex gap-2">
-                <Button type="submit" variant="outline" className="flex-1">Save Draft</Button>
-                <Button type="submit" className="flex-1 gap-2">
+                <Button type="submit" variant="outline" className="flex-1" disabled={creating}>
+                  Save Draft
+                </Button>
+                <Button
+                  type="button"
+                  className="flex-1 gap-2"
+                  disabled={creating}
+                  onClick={(e) => handleCreateInvoice(e, true)}
+                >
                   <Send className="h-4 w-4" /> Send Invoice
                 </Button>
               </div>
@@ -229,66 +353,102 @@ export default function InvoicesPage() {
 
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b text-left text-sm text-muted-foreground">
-                  <th className="p-4 font-medium">Invoice #</th>
-                  <th className="p-4 font-medium">Customer</th>
-                  <th className="p-4 font-medium">Amount</th>
-                  <th className="p-4 font-medium">Status</th>
-                  <th className="p-4 font-medium">Due Date</th>
-                  <th className="p-4 font-medium">Created</th>
-                  <th className="p-4 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mockInvoices.map((inv) => (
-                  <tr
-                    key={inv.id}
-                    className="border-b last:border-0 hover:bg-muted/50 cursor-pointer"
-                    onClick={() => openDetail(inv)}
-                  >
-                    <td className="p-4 font-medium text-sm">{inv.number}</td>
-                    <td className="p-4 text-sm text-muted-foreground">{inv.customerEmail}</td>
-                    <td className="p-4">
-                      <p className="text-sm font-medium">{inv.totalBch} BCH</p>
-                      <p className="text-xs text-muted-foreground">{inv.totalUsd}</p>
-                    </td>
-                    <td className="p-4">
-                      <Badge variant={statusColors[inv.status]} className="text-xs">{inv.status}</Badge>
-                    </td>
-                    <td className="p-4 text-sm text-muted-foreground">{inv.dueDate}</td>
-                    <td className="p-4 text-sm text-muted-foreground">{inv.created}</td>
-                    <td className="p-4">
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={(e) => { e.stopPropagation(); openDetail(inv); }}
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </Button>
-                        {(inv.status === "SENT" || inv.status === "VIEWED" || inv.status === "OVERDUE") && (
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : invoices.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <p className="text-lg font-medium">No invoices yet</p>
+              <p className="text-sm mt-1">Create your first invoice to get started.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b text-left text-sm text-muted-foreground">
+                    <th className="p-4 font-medium">Invoice #</th>
+                    <th className="p-4 font-medium">Customer</th>
+                    <th className="p-4 font-medium">Amount</th>
+                    <th className="p-4 font-medium">Status</th>
+                    <th className="p-4 font-medium">Due Date</th>
+                    <th className="p-4 font-medium">Created</th>
+                    <th className="p-4 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoices.map((inv) => (
+                    <tr
+                      key={inv.id}
+                      className="border-b last:border-0 hover:bg-muted/50 cursor-pointer"
+                      onClick={() => openDetail(inv)}
+                    >
+                      <td className="p-4 font-medium text-sm">{inv.number}</td>
+                      <td className="p-4 text-sm text-muted-foreground">{inv.customerEmail}</td>
+                      <td className="p-4">
+                        <p className="text-sm font-medium">{inv.totalBch} BCH</p>
+                        <p className="text-xs text-muted-foreground">{inv.totalUsd}</p>
+                      </td>
+                      <td className="p-4">
+                        <Badge variant={statusColors[inv.status]} className="text-xs">{inv.status}</Badge>
+                      </td>
+                      <td className="p-4 text-sm text-muted-foreground">{inv.dueDate}</td>
+                      <td className="p-4 text-sm text-muted-foreground">{inv.created}</td>
+                      <td className="p-4">
+                        <div className="flex gap-1">
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e) => { e.stopPropagation(); openDetail(inv); }}
                           >
-                            <Mail className="h-3.5 w-3.5" />
+                            <Eye className="h-3.5 w-3.5" />
                           </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                          {(inv.status === "SENT" || inv.status === "VIEWED" || inv.status === "OVERDUE") && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={(e) => handleSendInvoice(inv.id, e)}
+                            >
+                              <Mail className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => p - 1)}
+          >
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Page {page} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next
+          </Button>
+        </div>
+      )}
 
       <InvoiceDetail invoice={selectedInvoice} open={detailOpen} onOpenChange={setDetailOpen} />
     </div>

@@ -49,7 +49,7 @@ export function PaymentLinkDetail({
 
   if (!link) return null;
 
-  const paymentUrl = `https://bchpay.app/pay/${link.slug}`;
+  const paymentUrl = `https://cashtap.app/pay/${link.slug}`;
 
   const copyUrl = () => {
     navigator.clipboard.writeText(paymentUrl);

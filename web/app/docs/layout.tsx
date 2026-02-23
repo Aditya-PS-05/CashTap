@@ -6,7 +6,7 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex h-14 items-center px-6 gap-6">
           <Link href="/" className="flex items-center gap-2 font-bold">
-            BCH Pay
+            CashTap
           </Link>
           <nav className="flex items-center gap-4 text-sm">
             <Link href="/docs/api" className="text-muted-foreground hover:text-foreground transition-colors">

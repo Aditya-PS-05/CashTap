@@ -9,10 +9,10 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "BCH Pay — Bitcoin Cash Payment Rails",
+  title: "CashTap — Bitcoin Cash Payment Rails",
   description: "Accept Bitcoin Cash payments with mobile POS, payment links, invoices, and CashToken loyalty rewards.",
   openGraph: {
-    title: "BCH Pay — Bitcoin Cash Payment Rails",
+    title: "CashTap — Bitcoin Cash Payment Rails",
     description: "Accept Bitcoin Cash payments with mobile POS, payment links, invoices, and CashToken loyalty rewards.",
   },
 };

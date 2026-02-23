@@ -39,10 +39,6 @@ const statusColors = {
   OVERDUE: "destructive" as const,
 };
 
-const mockItems = [
-  { description: "Service / Product", quantity: 1, unitPrice: 0 },
-];
-
 export function InvoiceDetail({
   invoice,
   open,
@@ -56,16 +52,16 @@ export function InvoiceDetail({
 
   if (!invoice) return null;
 
-  const items = invoice.items || mockItems;
+  const items = invoice.items || [];
   const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
   const taxRate = invoice.taxRate ?? 0;
   const tax = subtotal * (taxRate / 100);
-  const total = subtotal + tax;
-  const address = invoice.address || "bitcoincash:qzm3abc123def456ghi789jkl012mno345";
-  const paymentURI = generatePaymentURI(address, invoice.totalBch, `Invoice ${invoice.number}`);
+  const address = invoice.address;
+  const paymentURI = address ? generatePaymentURI(address, invoice.totalBch, `Invoice ${invoice.number}`) : "";
   const isPaid = invoice.status === "PAID";
 
   const copyAddress = () => {
+    if (!address) return;
     navigator.clipboard.writeText(address);
     setCopied(true);
     toast.success("Address copied!");
@@ -126,7 +122,7 @@ export function InvoiceDetail({
 
           {/* Totals */}
           <div className="space-y-2 text-sm">
-            {items[0]?.unitPrice > 0 && (
+            {items.length > 0 && items[0]?.unitPrice > 0 && (
               <>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subtotal</span>
@@ -149,8 +145,8 @@ export function InvoiceDetail({
             </div>
           </div>
 
-          {/* Payment QR (if not paid) */}
-          {!isPaid && (
+          {/* Payment QR (if not paid and address available) */}
+          {!isPaid && address && (
             <div className="text-center space-y-3 border-t pt-4">
               <p className="text-sm font-medium">Scan to Pay</p>
               <div className="flex justify-center">

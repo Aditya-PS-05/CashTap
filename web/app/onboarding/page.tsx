@@ -9,7 +9,7 @@ import { ArrowRight } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://cashtap-api-production.up.railway.app";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -36,7 +36,7 @@ export default function OnboardingPage() {
 
       if (!res.ok) throw new Error("Failed to create merchant profile");
 
-      toast.success("Welcome to BCH Pay!");
+      toast.success("Welcome to CashTap!");
       router.push("/dashboard?tour=true");
     } catch {
       toast.error("Failed to create profile. Please try again.");
@@ -51,7 +51,7 @@ export default function OnboardingPage() {
         <CardContent className="pt-8 pb-8 space-y-6">
           <div className="text-center">
             <div className="mx-auto mb-4 relative w-20 h-20">
-              <Image src="/images/bch_coin_icon.png" alt="BCH Pay" fill className="object-contain" />
+              <Image src="/images/bch_coin_icon.png" alt="CashTap" fill className="object-contain" />
             </div>
             <h1 className="text-2xl font-bold">Set Up Your Business</h1>
             <p className="text-sm text-muted-foreground mt-1">

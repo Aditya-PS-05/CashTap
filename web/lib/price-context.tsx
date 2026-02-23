@@ -20,7 +20,7 @@ interface PriceContextType extends PriceState {
 
 const PriceContext = createContext<PriceContextType | null>(null);
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://cashtap-api-production.up.railway.app";
 const REFRESH_INTERVAL = 60_000; // 60 seconds
 
 export function PriceProvider({ children }: { children: ReactNode }) {
@@ -52,7 +52,7 @@ export function PriceProvider({ children }: { children: ReactNode }) {
   // Load display currency preference from localStorage
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("bchpay_display_currency");
+      const saved = localStorage.getItem("cashtap_display_currency");
       if (saved === "BCH" || saved === "USD") {
         setState((s) => ({ ...s, displayCurrency: saved }));
       }
@@ -62,7 +62,7 @@ export function PriceProvider({ children }: { children: ReactNode }) {
   const setDisplayCurrency = useCallback((currency: DisplayCurrency) => {
     setState((s) => ({ ...s, displayCurrency: currency }));
     try {
-      localStorage.setItem("bchpay_display_currency", currency);
+      localStorage.setItem("cashtap_display_currency", currency);
     } catch {}
   }, []);
 

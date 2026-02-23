@@ -17,9 +17,9 @@ export default function SdkDocsPage() {
   useEffect(() => {
     if (!sdkLoaded || !buttonRef.current) return;
     buttonRef.current.innerHTML = "";
-    const BCHPay = (window as any).BCHPay;
-    if (BCHPay?.button) {
-      BCHPay.button({
+    const CashTap = (window as any).CashTap;
+    if (CashTap?.button) {
+      CashTap.button({
         merchant: "bitcoincash:qz...",
         amount: Number(amount),
         memo,
@@ -86,7 +86,7 @@ export default function SdkDocsPage() {
         <div className="space-y-2">
           <Badge variant="outline">Step 1</Badge>
           <p className="text-muted-foreground">Include the SDK script on your page:</p>
-          <pre className="bg-muted p-4 rounded text-sm overflow-x-auto">{`<script src="https://bchpay.app/sdk.js"></script>`}</pre>
+          <pre className="bg-muted p-4 rounded text-sm overflow-x-auto">{`<script src="https://cashtap.app/sdk.js"></script>`}</pre>
         </div>
         <div className="space-y-2">
           <Badge variant="outline">Step 2</Badge>
@@ -109,14 +109,14 @@ export default function SdkDocsPage() {
 <body>
   <div id="pay-button"></div>
 
-  <script src="https://bchpay.app/sdk.js"></script>
+  <script src="https://cashtap.app/sdk.js"></script>
   <script>
-    BCHPay.button({
+    CashTap.button({
       merchant: "bitcoincash:qz...",
       amount: ${amount},
       memo: "${memo}",
       containerId: "pay-button",
-      apiKey: "bchpay_xxx...",
+      apiKey: "cashtap_xxx...",
       onSuccess: function(tx) {
         console.log("Paid!", tx);
       }
@@ -127,8 +127,8 @@ export default function SdkDocsPage() {
           </TabsContent>
           <TabsContent value="js">
             <pre className="bg-muted p-4 rounded text-sm overflow-x-auto">{`// Using the SDK programmatically
-const session = await BCHPay.createCheckout(
-  "bchpay_xxx...", // API key
+const session = await CashTap.createCheckout(
+  "cashtap_xxx...", // API key
   ${amount},         // amount in USD cents
   {
     memo: "${memo}",
@@ -138,7 +138,7 @@ const session = await BCHPay.createCheckout(
 );
 
 // Open the checkout modal
-BCHPay.openModal(session.checkout_url, {
+CashTap.openModal(session.checkout_url, {
   onSuccess: (data) => console.log("Paid!", data),
   onCancel: () => console.log("Cancelled"),
 });`}</pre>
@@ -153,12 +153,12 @@ export function PayButton() {
 
   useEffect(() => {
     if (!loaded || !ref.current) return;
-    window.BCHPay.button({
+    window.CashTap.button({
       merchant: "bitcoincash:qz...",
       amount: ${amount},
       memo: "${memo}",
-      containerId: "bch-pay-btn",
-      apiKey: "bchpay_xxx...",
+      containerId: "cashtap-btn",
+      apiKey: "cashtap_xxx...",
       onSuccess: (tx) => console.log("Paid!", tx),
     });
   }, [loaded]);
@@ -166,7 +166,7 @@ export function PayButton() {
   return (
     <>
       <Script src="/sdk.js" onLoad={() => setLoaded(true)} />
-      <div id="bch-pay-btn" ref={ref} />
+      <div id="cashtap-btn" ref={ref} />
     </>
   );
 }`}</pre>

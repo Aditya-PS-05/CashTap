@@ -10,7 +10,7 @@ import { Copy, Check, ExternalLink, Loader2, X } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://cashtap-api-production.up.railway.app";
 
 type SessionStatus = "loading" | "awaiting" | "detected" | "confirmed" | "expired" | "error";
 
@@ -64,7 +64,7 @@ export default function CheckoutPage() {
         setTimeout(() => {
           const url = `${data.session.success_url}${data.session.success_url.includes("?") ? "&" : "?"}session_id=${sessionId}`;
           if (isEmbed) {
-            window.parent.postMessage({ type: "bchpay:success", payload: { session_id: sessionId, status: "COMPLETE" } }, "*");
+            window.parent.postMessage({ type: "cashtap:success", payload: { session_id: sessionId, status: "COMPLETE" } }, "*");
           } else {
             window.location.href = url;
           }
@@ -110,7 +110,7 @@ export default function CheckoutPage() {
 
   const handleCancel = () => {
     if (isEmbed) {
-      window.parent.postMessage({ type: "bchpay:cancel" }, "*");
+      window.parent.postMessage({ type: "cashtap:cancel" }, "*");
     } else if (session?.cancel_url) {
       window.location.href = session.cancel_url;
     }
@@ -224,7 +224,7 @@ export default function CheckoutPage() {
           {/* Footer */}
           <div className="border-t pt-4">
             <p className="text-xs text-muted-foreground">
-              Powered by <span className="font-semibold text-primary">BCH Pay</span>
+              Powered by <span className="font-semibold text-primary">CashTap</span>
             </p>
           </div>
         </CardContent>

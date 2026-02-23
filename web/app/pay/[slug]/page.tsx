@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,38 +11,143 @@ import Image from "next/image";
 import { toast } from "sonner";
 import { generatePaymentURI, shortenAddress } from "@/lib/utils";
 
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ||
+  "https://cashtap-api-production.up.railway.app";
+
 type PaymentStatus = "awaiting" | "detected" | "confirmed";
+
+interface PaymentData {
+  merchantName: string;
+  merchantLogo: string | null;
+  memo: string;
+  amountBch: string;
+  amountUsd: string;
+  address: string;
+}
 
 export default function PaymentPage() {
   const params = useParams();
   const slug = params.slug as string;
   const [status, setStatus] = useState<PaymentStatus>("awaiting");
   const [copied, setCopied] = useState(false);
+  const [payment, setPayment] = useState<PaymentData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Mock payment data
-  const payment = {
-    merchantName: "Coffee Shop BCH",
-    merchantLogo: null,
-    memo: "Coffee Latte",
-    amountBch: "0.01460000",
-    amountUsd: "5.00",
-    address: "bitcoincash:qzm3abc123def456ghi789jkl012mno345",
-  };
+  // Fetch payment link data
+  useEffect(() => {
+    async function fetchPaymentLink() {
+      try {
+        const [linkRes, priceRes] = await Promise.all([
+          fetch(`${API_BASE}/api/payment-links/${slug}`),
+          fetch(`${API_BASE}/api/price`),
+        ]);
+
+        if (!linkRes.ok) {
+          throw new Error("Payment link not found");
+        }
+
+        const linkData = await linkRes.json();
+        const pl = linkData.payment_link || linkData;
+
+        let bchPrice = 0;
+        if (priceRes.ok) {
+          const priceData = await priceRes.json();
+          bchPrice = priceData.bch_usd || 0;
+        }
+
+        const amountSats = Number(pl.amount_satoshis || 0);
+        const amountBch = amountSats / 1e8;
+        const amountUsd = bchPrice > 0 ? amountBch * bchPrice : 0;
+
+        const address = pl.payment_address || pl.merchant?.bch_address || "";
+
+        setPayment({
+          merchantName: pl.merchant?.business_name || "Merchant",
+          merchantLogo: pl.merchant?.logo_url || null,
+          memo: pl.memo || "",
+          amountBch: amountBch.toFixed(8),
+          amountUsd: amountUsd.toFixed(2),
+          address,
+        });
+
+        // If the payment link is already inactive (paid), show confirmed immediately
+        if (pl.status === "INACTIVE") {
+          setStatus("confirmed");
+          setTxHash(pl.tx_hash || null);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load payment");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchPaymentLink();
+  }, [slug]);
+
+  // Poll for payment status
+  const pollStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/payment-links/${slug}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const pl = data.payment_link || data;
+
+      if (pl.status === "INACTIVE") {
+        setStatus("confirmed");
+        setTxHash(pl.tx_hash || null);
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+      }
+    } catch {
+      // Polling failure is non-fatal
+    }
+  }, [slug]);
+
+  useEffect(() => {
+    if (status !== "awaiting" || loading || error) return;
+    pollingRef.current = setInterval(pollStatus, 3000);
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [status, loading, error, pollStatus]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-background to-muted flex items-center justify-center p-4">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error || !payment) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-background to-muted flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6 text-center space-y-4">
+            <p className="text-lg font-semibold text-destructive">Payment Link Not Found</p>
+            <p className="text-sm text-muted-foreground">{error || "This payment link does not exist or has expired."}</p>
+            <div className="border-t pt-4">
+              <p className="text-xs text-muted-foreground">
+                Powered by <span className="font-semibold text-primary">CashTap</span>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const paymentURI = generatePaymentURI(payment.address, payment.amountBch, payment.memo);
-
-  // Simulate payment detection after 15s for demo
-  useEffect(() => {
-    if (status !== "awaiting") return;
-    const timer = setTimeout(() => setStatus("detected"), 15000);
-    return () => clearTimeout(timer);
-  }, [status]);
-
-  useEffect(() => {
-    if (status !== "detected") return;
-    const timer = setTimeout(() => setStatus("confirmed"), 3000);
-    return () => clearTimeout(timer);
-  }, [status]);
 
   const copyAddress = () => {
     navigator.clipboard.writeText(payment.address);
@@ -135,16 +240,18 @@ export default function PaymentPage() {
                 <p className="text-sm text-muted-foreground">Thank you for your payment.</p>
               </div>
               <Badge variant="success">Confirmed</Badge>
-              <div className="pt-2 text-xs text-muted-foreground">
-                <p>Transaction: <code className="font-mono">abc123...ef456</code></p>
-              </div>
+              {txHash && (
+                <div className="pt-2 text-xs text-muted-foreground">
+                  <p>Transaction: <code className="font-mono">{shortenAddress(txHash)}</code></p>
+                </div>
+              )}
             </div>
           )}
 
           {/* Footer */}
           <div className="border-t pt-4">
             <p className="text-xs text-muted-foreground">
-              Powered by <span className="font-semibold text-primary">BCH Pay</span>
+              Powered by <span className="font-semibold text-primary">CashTap</span>
             </p>
           </div>
         </CardContent>

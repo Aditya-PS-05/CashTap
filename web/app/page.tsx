@@ -16,7 +16,7 @@ export default function LandingPage() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0AC18E]">
               <Zap className="h-4 w-4 text-white" />
             </div>
-            <span className="text-lg font-bold">BCH Pay</span>
+            <span className="text-lg font-bold">CashTap</span>
           </div>
           <div className="flex items-center gap-4">
             <Link href="/docs" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors hidden sm:block">
@@ -263,7 +263,7 @@ export default function LandingPage() {
                 On-Chain Loyalty &amp; Receipt NFTs
               </h2>
               <p className="text-muted-foreground mb-8 leading-relaxed">
-                BCH Pay leverages Bitcoin Cash&apos;s native CashToken protocol — no sidechains,
+                CashTap leverages Bitcoin Cash&apos;s native CashToken protocol — no sidechains,
                 no bridges, no extra fees. Tokens live directly on the BCH blockchain.
               </p>
               <div className="space-y-6">
@@ -359,9 +359,9 @@ export default function LandingPage() {
                 <span className="text-xs text-zinc-500 ml-2">index.html</span>
               </div>
               <pre className="text-sm text-green-400 overflow-x-auto">
-                <code>{`<script src="https://bchpay.app/sdk.js"></script>
+                <code>{`<script src="https://cashtap.app/sdk.js"></script>
 <script>
-  BCHPay.button({
+  CashTap.button({
     merchant: "bitcoincash:qz...",
     amount: 500, // cents USD
     memo: "Coffee",
@@ -379,7 +379,7 @@ export default function LandingPage() {
       {/* Download Section */}
       <section id="download" className="py-24">
         <div className="mx-auto max-w-6xl px-6 text-center">
-          <h2 className="text-3xl font-bold mb-4">Get BCH Pay</h2>
+          <h2 className="text-3xl font-bold mb-4">Get CashTap</h2>
           <p className="text-muted-foreground mb-12 max-w-lg mx-auto">
             Available on Android, Web, and as an embeddable SDK. Start accepting Bitcoin Cash today.
           </p>
@@ -444,7 +444,7 @@ export default function LandingPage() {
               <div className="flex h-6 w-6 items-center justify-center rounded bg-[#0AC18E]">
                 <Zap className="h-3 w-3 text-white" />
               </div>
-              <span className="text-sm font-semibold">BCH Pay</span>
+              <span className="text-sm font-semibold">CashTap</span>
             </div>
             <div className="flex items-center gap-6">
               <a href="https://github.com" className="text-muted-foreground hover:text-foreground transition-colors">

@@ -89,9 +89,9 @@ export default function AuthPage() {
         <CardContent className="pt-8 pb-8 text-center space-y-6">
           <div>
             <div className="mx-auto mb-4 relative w-20 h-20">
-              <Image src="/images/bch_coin_icon.png" alt="BCH Pay" fill className="object-contain" />
+              <Image src="/images/bch_coin_icon.png" alt="CashTap" fill className="object-contain" />
             </div>
-            <h1 className="text-2xl font-bold">BCH Pay</h1>
+            <h1 className="text-2xl font-bold">CashTap</h1>
             <p className="text-sm text-muted-foreground mt-1">
               Connect your Bitcoin Cash wallet to get started
             </p>

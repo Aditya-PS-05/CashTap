@@ -1,6 +1,6 @@
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ||
-  "https://bch-pay-api-production.up.railway.app";
+  "https://cashtap-api-production.up.railway.app";
 
 const MAX_RETRIES = 2;
 

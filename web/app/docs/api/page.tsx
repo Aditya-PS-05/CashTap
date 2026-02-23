@@ -83,7 +83,7 @@ export default function ApiDocsPage() {
       <div>
         <h1 className="text-4xl font-bold">API Reference</h1>
         <p className="text-lg text-muted-foreground mt-2">
-          BCH Pay REST API v1 — Base URL: <code className="text-sm bg-muted px-2 py-1 rounded">/api/v1</code>
+          CashTap REST API v1 — Base URL: <code className="text-sm bg-muted px-2 py-1 rounded">/api/v1</code>
         </p>
       </div>
 
@@ -91,7 +91,7 @@ export default function ApiDocsPage() {
       <section id="authentication" className="space-y-4">
         <h2 className="text-2xl font-bold border-b pb-2">Authentication</h2>
         <p className="text-muted-foreground">
-          BCH Pay supports two authentication methods. All authenticated endpoints accept either method.
+          CashTap supports two authentication methods. All authenticated endpoints accept either method.
         </p>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="rounded-lg border p-4 space-y-2">
@@ -125,14 +125,14 @@ export default function ApiDocsPage() {
               <TabsList><TabsTrigger value="curl">cURL</TabsTrigger><TabsTrigger value="js">JavaScript</TabsTrigger></TabsList>
               <TabsContent value="curl">
                 <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">
-{`curl -H "x-api-key: bchpay_xxx..." \\
+{`curl -H "x-api-key: cashtap_xxx..." \\
   ${"{API_URL}"}/api/v1/merchants/me`}
                 </pre>
               </TabsContent>
               <TabsContent value="js">
                 <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">
 {`fetch("/api/v1/merchants/me", {
-  headers: { "x-api-key": "bchpay_xxx..." }
+  headers: { "x-api-key": "cashtap_xxx..." }
 })`}
                 </pre>
               </TabsContent>
