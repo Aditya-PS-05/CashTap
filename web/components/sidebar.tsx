@@ -13,6 +13,7 @@ import {
   Coins,
   FileCode2,
   Zap,
+  Code2,
 } from "lucide-react";
 
 const navItems = [
@@ -23,6 +24,7 @@ const navItems = [
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3, tour: "analytics" },
   { href: "/dashboard/tokens", label: "CashTokens", icon: Coins, tour: "tokens" },
   { href: "/dashboard/contracts", label: "Contracts", icon: FileCode2, tour: "contracts" },
+  { href: "/docs", label: "Developers", icon: Code2, tour: "developers" },
   { href: "/dashboard/settings", label: "Settings", icon: Settings, tour: "settings" },
 ];
 

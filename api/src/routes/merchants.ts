@@ -29,6 +29,7 @@ const updateSchema = z.object({
   email: z.string().email().optional().nullable(),
   logo_url: z.string().url().optional().nullable(),
   webhook_url: z.string().url().optional().nullable(),
+  display_currency: z.enum(["BCH", "USD"]).optional(),
 });
 
 // --- Routes ---
@@ -78,11 +79,12 @@ merchants.post("/", async (c) => {
     },
   });
 
-  // Also store the key in the api_keys table
+  // Also store the key in the api_keys table with prefix for fast lookup
   await prisma.apiKey.create({
     data: {
       merchant_id: merchant.id,
       key_hash: apiKeyHash,
+      key_prefix: rawApiKey.substring(0, 16),
       label: "Default API Key",
       permissions: JSON.stringify(["*"]),
     },
@@ -121,6 +123,7 @@ merchants.get("/me", authMiddleware, async (c) => {
       email: true,
       logo_url: true,
       webhook_url: true,
+      display_currency: true,
       created_at: true,
       updated_at: true,
       _count: {

@@ -22,6 +22,7 @@ const createPaymentLinkSchema = z
       .enum(["daily", "weekly", "monthly", "yearly"])
       .optional(),
     expires_at: z.string().datetime().optional(),
+    contract_instance_id: z.string().optional(),
   })
   .refine(
     (data) => data.type !== "RECURRING" || !!data.recurring_interval,
@@ -63,7 +64,17 @@ paymentLinks.post("/", authMiddleware, async (c) => {
   }
 
   const merchantId = c.get("merchantId") as string;
-  const { amount_satoshis, currency, memo, type, recurring_interval, expires_at } = parsed.data;
+  const { amount_satoshis, currency, memo, type, recurring_interval, expires_at, contract_instance_id } = parsed.data;
+
+  // Validate contract_instance_id if provided
+  if (contract_instance_id) {
+    const contract = await prisma.contractInstance.findFirst({
+      where: { id: contract_instance_id, merchant_id: merchantId },
+    });
+    if (!contract) {
+      return c.json({ error: "Contract instance not found" }, 404);
+    }
+  }
 
   const slug = nanoid(12);
 
@@ -93,6 +104,7 @@ paymentLinks.post("/", authMiddleware, async (c) => {
       payment_address: paymentAddress,
       derivation_index: derivationIndex,
       expires_at: expires_at ? new Date(expires_at) : null,
+      contract_instance_id: contract_instance_id ?? null,
     },
   });
 
@@ -126,6 +138,9 @@ paymentLinks.post("/", authMiddleware, async (c) => {
  */
 paymentLinks.get("/:slug", async (c) => {
   const slug = c.req.param("slug");
+
+  // Special route: stats endpoint
+  // This is handled separately below via a more specific route
 
   // Determine if this is a slug (nanoid, typically 12 chars) or a CUID id
   // CUIDs start with 'c' and are ~25 chars; slugs are 12 chars
@@ -210,6 +225,67 @@ paymentLinks.get("/", authMiddleware, async (c) => {
       total,
       total_pages: Math.ceil(total / limit),
     },
+  });
+});
+
+/**
+ * GET /api/payment-links/:id/stats
+ * Get stats for a payment link (total collected, payment count, transaction history).
+ */
+paymentLinks.get("/:id/stats", authMiddleware, async (c) => {
+  const id = c.req.param("id");
+  const merchantId = c.get("merchantId") as string;
+
+  const paymentLink = await prisma.paymentLink.findFirst({
+    where: { id, merchant_id: merchantId },
+  });
+
+  if (!paymentLink) {
+    return c.json({ error: "Payment link not found" }, 404);
+  }
+
+  const transactions = await prisma.transaction.findMany({
+    where: { payment_link_id: id },
+    orderBy: { created_at: "desc" },
+    select: {
+      id: true,
+      tx_hash: true,
+      amount_satoshis: true,
+      status: true,
+      confirmations: true,
+      usd_rate_at_time: true,
+      created_at: true,
+    },
+  });
+
+  const totalSatoshis = transactions.reduce(
+    (sum, tx) => sum + Number(tx.amount_satoshis),
+    0
+  );
+
+  // Get current USD rate for total
+  let usdRate = 0;
+  try {
+    const { getBchPrice } = await import("../services/price.js");
+    const price = await getBchPrice();
+    usdRate = price.usd;
+  } catch {}
+
+  return c.json({
+    stats: {
+      payment_link_id: id,
+      type: paymentLink.type,
+      total_collected_satoshis: totalSatoshis.toString(),
+      total_collected_bch: (totalSatoshis / 1e8).toFixed(8),
+      total_collected_usd: usdRate ? ((totalSatoshis / 1e8) * usdRate).toFixed(2) : null,
+      payment_count: transactions.length,
+      recurring_count: paymentLink.recurring_count,
+      last_paid_at: paymentLink.last_paid_at,
+    },
+    transactions: transactions.map((tx) => ({
+      ...tx,
+      amount_satoshis: tx.amount_satoshis.toString(),
+    })),
   });
 });
 

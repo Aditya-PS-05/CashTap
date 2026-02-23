@@ -53,6 +53,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _webhookUrlController = TextEditingController();
   String _apiKey = '';
 
+  // Display currency
+  String _displayCurrency = 'BCH';
+
   // Appearance
   ThemeMode _selectedThemeMode = ThemeMode.system;
 
@@ -111,6 +114,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _webhookUrlController.text =
           prefs.getString(AppConstants.webhookUrlKey) ?? '';
       _apiKey = prefs.getString('api_key') ?? _generateApiKey();
+
+      // Display currency
+      _displayCurrency = prefs.getString('display_currency') ?? 'BCH';
 
       // Appearance
       final themeString =
@@ -905,6 +911,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 24),
 
+            // ── Display Currency ──
+            _buildSectionHeader(
+                theme, 'Display Currency', Icons.attach_money),
+            const SizedBox(height: 12),
+            _buildCard(
+              theme,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Primary Display Currency',
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Choose how amounts are displayed throughout the app',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                RadioListTile<String>(
+                  title: Text('BCH', style: theme.textTheme.bodyMedium),
+                  subtitle: Text('Show amounts in Bitcoin Cash',
+                      style: theme.textTheme.bodySmall),
+                  value: 'BCH',
+                  groupValue: _displayCurrency,
+                  activeColor: AppTheme.bchGreen,
+                  onChanged: (value) => _onDisplayCurrencyChanged(value!),
+                  dense: true,
+                ),
+                RadioListTile<String>(
+                  title: Text('USD', style: theme.textTheme.bodyMedium),
+                  subtitle: Text('Show amounts in US Dollars',
+                      style: theme.textTheme.bodySmall),
+                  value: 'USD',
+                  groupValue: _displayCurrency,
+                  activeColor: AppTheme.bchGreen,
+                  onChanged: (value) => _onDisplayCurrencyChanged(value!),
+                  dense: true,
+                ),
+                const SizedBox(height: 4),
+              ],
+            ),
+            const SizedBox(height: 24),
+
             // ── Appearance ──
             _buildSectionHeader(
                 theme, 'Appearance', Icons.palette_outlined),
@@ -1013,6 +1069,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  // ── Display currency handler ──
+
+  void _onDisplayCurrencyChanged(String currency) {
+    setState(() => _displayCurrency = currency);
+    _saveString('display_currency', currency);
+    _showSnackBar('Display currency set to $currency');
   }
 
   // ── Theme change handler ──

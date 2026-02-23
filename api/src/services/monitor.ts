@@ -364,6 +364,16 @@ class TransactionMonitor {
             ? "CONFIRMED"
             : "PENDING";
 
+      // Fetch current USD rate to store with the transaction
+      let usdRate: number | null = null;
+      try {
+        const { getBchPrice } = await import("./price.js");
+        const price = await getBchPrice();
+        usdRate = price.usd;
+      } catch {
+        // Price service unavailable, leave null
+      }
+
       // Create the transaction record
       const tx = await prisma.transaction.create({
         data: {
@@ -375,6 +385,7 @@ class TransactionMonitor {
           amount_satoshis: amount,
           confirmations,
           status,
+          usd_rate_at_time: usdRate,
         },
       });
 

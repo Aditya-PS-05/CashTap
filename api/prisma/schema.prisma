@@ -14,9 +14,10 @@ model Merchant {
   email        String?
   logo_url     String?
   api_key_hash String?
-  webhook_url  String?
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
+  webhook_url      String?
+  display_currency String   @default("BCH")
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
 
   payment_links      PaymentLink[]
   invoices           Invoice[]
@@ -28,6 +29,7 @@ model Merchant {
   contract_instances ContractInstance[]
   token_issuances    TokenIssuance[]
   receipt_nfts       ReceiptNFT[]
+  checkout_sessions  CheckoutSession[]
 
   @@map("merchants")
 }
@@ -58,11 +60,14 @@ model PaymentLink {
   recurring_interval String?
   recurring_count    Int               @default(0)
   last_paid_at       DateTime?
+  contract_instance_id String?
   expires_at         DateTime?
   created_at         DateTime          @default(now())
 
-  merchant     Merchant      @relation(fields: [merchant_id], references: [id])
-  transactions Transaction[]
+  merchant          Merchant          @relation(fields: [merchant_id], references: [id])
+  transactions      Transaction[]
+  contract_instance ContractInstance? @relation(fields: [contract_instance_id], references: [id])
+  checkout_sessions CheckoutSession[]
 
   @@index([merchant_id])
   @@index([slug])
@@ -114,6 +119,7 @@ model Transaction {
   status            TransactionStatus @default(PENDING)
   block_height      Int?
   token_category    String?
+  usd_rate_at_time  Float?
   created_at        DateTime          @default(now())
 
   merchant     Merchant     @relation(fields: [merchant_id], references: [id])
@@ -151,6 +157,7 @@ model ApiKey {
   id          String    @id @default(cuid())
   merchant_id String
   key_hash    String
+  key_prefix  String    @default("")
   label       String
   permissions Json
   last_used_at DateTime?
@@ -160,6 +167,7 @@ model ApiKey {
   merchant Merchant @relation(fields: [merchant_id], references: [id])
 
   @@index([merchant_id])
+  @@index([key_prefix])
   @@map("api_keys")
 }
 
@@ -253,6 +261,10 @@ enum ContractType {
 
 enum ContractStatus {
   ACTIVE
+  FUNDED
+  RELEASED
+  REFUNDED
+  DISPUTED
   COMPLETED
   EXPIRED
 }
@@ -267,9 +279,36 @@ model ContractInstance {
   status           ContractStatus @default(ACTIVE)
   created_at       DateTime       @default(now())
 
-  merchant Merchant @relation(fields: [merchant_id], references: [id])
+  merchant      Merchant      @relation(fields: [merchant_id], references: [id])
+  payment_links PaymentLink[]
 
   @@index([merchant_id])
   @@index([contract_address])
   @@map("contract_instances")
+}
+
+enum CheckoutSessionStatus {
+  OPEN
+  COMPLETE
+  EXPIRED
+}
+
+model CheckoutSession {
+  id              String                @id @default(cuid())
+  merchant_id     String
+  payment_link_id String?
+  amount_satoshis BigInt
+  currency        String                @default("USD")
+  memo            String?
+  success_url     String
+  cancel_url      String
+  status          CheckoutSessionStatus @default(OPEN)
+  expires_at      DateTime
+  created_at      DateTime              @default(now())
+
+  merchant     Merchant     @relation(fields: [merchant_id], references: [id])
+  payment_link PaymentLink? @relation(fields: [payment_link_id], references: [id])
+
+  @@index([merchant_id])
+  @@map("checkout_sessions")
 }

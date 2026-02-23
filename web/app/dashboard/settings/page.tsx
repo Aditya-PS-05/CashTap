@@ -6,13 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Key, Plus, Trash2, Webhook } from "lucide-react";
+import { Copy, Key, Plus, Trash2, Webhook, DollarSign } from "lucide-react";
 import { toast } from "sonner";
+import { usePrice } from "@/lib/price-context";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
 
 export default function SettingsPage() {
   const router = useRouter();
+  const { displayCurrency, setDisplayCurrency } = usePrice();
   const [loyaltyEnabled, setLoyaltyEnabled] = useState(false);
   const [receiptsEnabled, setReceiptsEnabled] = useState(false);
   const [loadingTokens, setLoadingTokens] = useState(true);
@@ -204,6 +206,49 @@ export default function SettingsPage() {
             />
           </div>
           <Button size="sm">Save Settings</Button>
+        </CardContent>
+      </Card>
+
+      {/* Display Currency */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <DollarSign className="h-4 w-4" /> Display Currency
+          </CardTitle>
+          <CardDescription>Choose how amounts are displayed across the dashboard.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex gap-3">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="radio"
+                name="display_currency"
+                value="BCH"
+                checked={displayCurrency === "BCH"}
+                onChange={() => setDisplayCurrency("BCH")}
+                className="accent-primary"
+              />
+              <span className="font-medium">BCH</span>
+              <span className="text-xs text-muted-foreground">Show amounts in Bitcoin Cash</span>
+            </label>
+          </div>
+          <div className="flex gap-3">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="radio"
+                name="display_currency"
+                value="USD"
+                checked={displayCurrency === "USD"}
+                onChange={() => setDisplayCurrency("USD")}
+                className="accent-primary"
+              />
+              <span className="font-medium">USD</span>
+              <span className="text-xs text-muted-foreground">Show amounts in US Dollars</span>
+            </label>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            The secondary currency is always shown alongside the primary one.
+          </p>
         </CardContent>
       </Card>
 

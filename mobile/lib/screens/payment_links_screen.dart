@@ -210,6 +210,228 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
     );
   }
 
+  void _showRecurringDetail(PaymentLink link) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return FutureBuilder<Map<String, dynamic>>(
+          future: _apiService.getPaymentLinkStats(link.id),
+          builder: (ctx, snapshot) {
+            final isLoadingStats =
+                snapshot.connectionState == ConnectionState.waiting;
+            final stats = snapshot.data;
+
+            final totalCollectedSats =
+                stats?['total_collected_satoshis'] as int? ?? 0;
+            final totalCollectedBch = totalCollectedSats / 100000000.0;
+            final paymentCount = stats?['payment_count'] as int? ?? 0;
+            final lastPaymentAtRaw = stats?['last_payment_at'];
+            DateTime? lastPaymentAt;
+            if (lastPaymentAtRaw is String) {
+              lastPaymentAt = DateTime.tryParse(lastPaymentAtRaw);
+            }
+
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Drag handle
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: theme.dividerColor,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Title (memo)
+                  Text(
+                    link.memo.isNotEmpty ? link.memo : 'Untitled',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Amount
+                  Text(
+                    link.amountSatoshis > 0
+                        ? BchService.formatBchWithUnit(link.amountBch)
+                        : 'Any amount',
+                    style: GoogleFonts.inter(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Type badge + interval
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _typeColor(link.type).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          link.type.displayName,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _typeColor(link.type),
+                          ),
+                        ),
+                      ),
+                      if (link.recurringInterval != null) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          link.recurringInterval!,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: Colors.purple,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                      if (link.recurringCount > 0) ...[
+                        const SizedBox(width: 6),
+                        Text(
+                          '(${link.recurringCount}x)',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: theme.textTheme.bodySmall?.color,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Divider
+                  Divider(color: theme.dividerColor),
+                  const SizedBox(height: 16),
+
+                  // Stats section
+                  Text(
+                    'Stats',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  if (isLoadingStats)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else ...[
+                    // Total collected
+                    _buildStatRow(
+                      theme,
+                      icon: Icons.account_balance_wallet_outlined,
+                      label: 'Total Collected',
+                      value: BchService.formatBchWithUnit(totalCollectedBch),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Payment count
+                    _buildStatRow(
+                      theme,
+                      icon: Icons.receipt_long_outlined,
+                      label: 'Payment Count',
+                      value: '$paymentCount',
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Last payment date
+                    _buildStatRow(
+                      theme,
+                      icon: Icons.schedule_outlined,
+                      label: 'Last Payment',
+                      value: lastPaymentAt != null
+                          ? _formatFullDate(lastPaymentAt)
+                          : 'No payments yet',
+                    ),
+                  ],
+
+                  const SizedBox(height: 20),
+
+                  // Copy slug button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: link.slug));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Payment link slug copied!')),
+                        );
+                      },
+                      icon: const Icon(Icons.copy, size: 18),
+                      label: const Text('Copy Link Slug'),
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildStatRow(
+    ThemeData theme, {
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: theme.textTheme.bodySmall?.color),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.textTheme.bodySmall?.color,
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
   Color _statusColor(PaymentLinkStatus status) {
     switch (status) {
       case PaymentLinkStatus.active:
@@ -297,11 +519,15 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: () {
-          // Copy payment link
-          Clipboard.setData(ClipboardData(text: link.slug));
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Payment link slug copied!')),
-          );
+          if (link.isRecurring) {
+            _showRecurringDetail(link);
+          } else {
+            // Copy payment link
+            Clipboard.setData(ClipboardData(text: link.slug));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Payment link slug copied!')),
+            );
+          }
         },
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -429,5 +655,13 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
     return '${months[date.month - 1]} ${date.day}';
+  }
+
+  String _formatFullDate(DateTime date) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 }

@@ -21,11 +21,10 @@ class _ContractsScreenState extends State<ContractsScreen>
   bool _isLoading = true;
   late TabController _tabController;
 
-  // Split Payment form
-  final _sp1Controller = TextEditingController();
-  final _sp2Controller = TextEditingController();
-  final _spPercent1Controller = TextEditingController(text: '50');
-  final _spPercent2Controller = TextEditingController(text: '50');
+  // Split Payment form - dynamic N-recipient list
+  final List<TextEditingController> _spPkhControllers = [];
+  final List<TextEditingController> _spPercentControllers = [];
+  final List<TextEditingController> _spLabelControllers = [];
 
   // Escrow form
   final _escBuyerController = TextEditingController();
@@ -43,16 +42,45 @@ class _ContractsScreenState extends State<ContractsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    // Initialize with 2 recipients by default
+    _addRecipient(initialPercent: '50');
+    _addRecipient(initialPercent: '50');
     _fetchContracts();
+  }
+
+  void _addRecipient({String initialPercent = '0'}) {
+    if (_spPkhControllers.length >= 10) return;
+    setState(() {
+      _spPkhControllers.add(TextEditingController());
+      _spPercentControllers.add(TextEditingController(text: initialPercent));
+      _spLabelControllers.add(TextEditingController());
+    });
+  }
+
+  void _removeRecipient(int index) {
+    if (_spPkhControllers.length <= 2) return;
+    setState(() {
+      _spPkhControllers[index].dispose();
+      _spPercentControllers[index].dispose();
+      _spLabelControllers[index].dispose();
+      _spPkhControllers.removeAt(index);
+      _spPercentControllers.removeAt(index);
+      _spLabelControllers.removeAt(index);
+    });
   }
 
   @override
   void dispose() {
     _tabController.dispose();
-    _sp1Controller.dispose();
-    _sp2Controller.dispose();
-    _spPercent1Controller.dispose();
-    _spPercent2Controller.dispose();
+    for (final c in _spPkhControllers) {
+      c.dispose();
+    }
+    for (final c in _spPercentControllers) {
+      c.dispose();
+    }
+    for (final c in _spLabelControllers) {
+      c.dispose();
+    }
     _escBuyerController.dispose();
     _escSellerController.dispose();
     _escArbiterController.dispose();
@@ -82,24 +110,48 @@ class _ContractsScreenState extends State<ContractsScreen>
   }
 
   Future<void> _createSplitPayment() async {
-    final p1 = int.tryParse(_spPercent1Controller.text) ?? 0;
-    final p2 = int.tryParse(_spPercent2Controller.text) ?? 0;
-    if (_sp1Controller.text.length != 40 || _sp2Controller.text.length != 40) {
-      _snack('PKH must be a 40-character hex string', isError: true);
+    // Validate all PKH fields
+    for (int i = 0; i < _spPkhControllers.length; i++) {
+      if (_spPkhControllers[i].text.length != 40) {
+        _snack('Recipient ${i + 1} PKH must be a 40-character hex string',
+            isError: true);
+        return;
+      }
+    }
+
+    // Validate percentages sum to 100
+    int totalPercent = 0;
+    for (int i = 0; i < _spPercentControllers.length; i++) {
+      final p = int.tryParse(_spPercentControllers[i].text) ?? 0;
+      if (p <= 0) {
+        _snack('Recipient ${i + 1} percentage must be a positive integer',
+            isError: true);
+        return;
+      }
+      totalPercent += p;
+    }
+    if (totalPercent != 100) {
+      _snack('Percentages must add up to 100 (currently $totalPercent)',
+          isError: true);
       return;
     }
-    if (p1 + p2 != 100) {
-      _snack('Percentages must add up to 100', isError: true);
-      return;
+
+    // Build recipients list
+    final recipients = <Map<String, dynamic>>[];
+    for (int i = 0; i < _spPkhControllers.length; i++) {
+      final entry = <String, dynamic>{
+        'pkh': _spPkhControllers[i].text,
+        'percent': int.parse(_spPercentControllers[i].text),
+      };
+      if (_spLabelControllers[i].text.isNotEmpty) {
+        entry['label'] = _spLabelControllers[i].text;
+      }
+      recipients.add(entry);
     }
+
     setState(() => _creating = true);
     try {
-      await _apiService.createSplitPayment(
-        recipient1Pkh: _sp1Controller.text,
-        recipient2Pkh: _sp2Controller.text,
-        split1Percent: p1,
-        split2Percent: p2,
-      );
+      await _apiService.createMultiSplitPayment(recipients: recipients);
       _snack('Split payment contract created!');
       _fetchContracts();
     } catch (e) {
@@ -170,6 +222,26 @@ class _ContractsScreenState extends State<ContractsScreen>
     }
   }
 
+  Future<void> _releaseEscrow(ContractInstance contract) async {
+    try {
+      await _apiService.releaseEscrow(contract.id);
+      _snack('Escrow released successfully');
+      _fetchContracts();
+    } catch (e) {
+      _snack('$e', isError: true);
+    }
+  }
+
+  Future<void> _refundEscrow(ContractInstance contract) async {
+    try {
+      await _apiService.refundEscrow(contract.id);
+      _snack('Escrow refunded successfully');
+      _fetchContracts();
+    } catch (e) {
+      _snack('$e', isError: true);
+    }
+  }
+
   Color _typeColor(ContractType type) {
     switch (type) {
       case ContractType.escrow:
@@ -185,6 +257,14 @@ class _ContractsScreenState extends State<ContractsScreen>
     switch (status) {
       case ContractStatus.active:
         return AppTheme.successGreen;
+      case ContractStatus.funded:
+        return AppTheme.pendingBlue;
+      case ContractStatus.released:
+        return Colors.teal;
+      case ContractStatus.refunded:
+        return Colors.deepOrange;
+      case ContractStatus.disputed:
+        return AppTheme.errorRed;
       case ContractStatus.completed:
         return Colors.blueGrey;
       case ContractStatus.expired:
@@ -259,7 +339,7 @@ class _ContractsScreenState extends State<ContractsScreen>
                       ],
                     ),
                     SizedBox(
-                      height: 320,
+                      height: 400,
                       child: TabBarView(
                         controller: _tabController,
                         children: [
@@ -349,63 +429,134 @@ class _ContractsScreenState extends State<ContractsScreen>
     );
   }
 
+  int get _splitPercentSum {
+    int sum = 0;
+    for (final c in _spPercentControllers) {
+      sum += int.tryParse(c.text) ?? 0;
+    }
+    return sum;
+  }
+
   Widget _buildSplitPaymentForm(ThemeData theme) {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          TextField(
-            controller: _sp1Controller,
-            style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-            decoration: const InputDecoration(
-              labelText: 'Recipient 1 PKH (hex)',
-              isDense: true,
+          // Recipient list
+          ...List.generate(_spPkhControllers.length, (i) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Recipient ${i + 1}',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: theme.textTheme.bodySmall?.color,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (_spPkhControllers.length > 2)
+                        InkWell(
+                          onTap: () => _removeRecipient(i),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.all(2),
+                            child: Icon(Icons.remove_circle_outline,
+                                size: 18, color: AppTheme.errorRed),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: TextField(
+                          controller: _spPkhControllers[i],
+                          style: const TextStyle(
+                              fontSize: 12, fontFamily: 'monospace'),
+                          decoration: const InputDecoration(
+                            labelText: 'PKH (hex)',
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 56,
+                        child: TextField(
+                          controller: _spPercentControllers[i],
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: '%',
+                            isDense: true,
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          controller: _spLabelControllers[i],
+                          style: const TextStyle(fontSize: 12),
+                          decoration: const InputDecoration(
+                            labelText: 'Label',
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }),
+
+          // Percentage sum indicator and add button
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (_spPkhControllers.length < 10)
+                  TextButton.icon(
+                    onPressed: () => _addRecipient(),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add Recipient'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.purple,
+                      textStyle: GoogleFonts.inter(fontSize: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                    ),
+                  )
+                else
+                  const SizedBox.shrink(),
+                Text(
+                  'Total: $_splitPercentSum%',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: _splitPercentSum == 100
+                        ? AppTheme.successGreen
+                        : AppTheme.errorRed,
+                  ),
+                ),
+              ],
             ),
           ),
+
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _spPercent1Controller,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Split %',
-                    isDense: true,
-                  ),
-                  onChanged: (v) {
-                    final p = int.tryParse(v) ?? 50;
-                    _spPercent2Controller.text = '${100 - p}';
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: _sp2Controller,
-                  style:
-                      const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                  decoration: const InputDecoration(
-                    labelText: 'Recipient 2 PKH',
-                    isDense: true,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 60,
-                child: TextField(
-                  controller: _spPercent2Controller,
-                  readOnly: true,
-                  decoration: const InputDecoration(
-                    labelText: '%',
-                    isDense: true,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const Spacer(),
+
+          // Create button
           SizedBox(
             width: double.infinity,
             height: 46,
@@ -562,6 +713,11 @@ class _ContractsScreenState extends State<ContractsScreen>
   }
 
   Widget _buildContractCard(ThemeData theme, ContractInstance contract) {
+    final isEscrow = contract.type == ContractType.escrow;
+    final canActOnEscrow = isEscrow &&
+        (contract.status == ContractStatus.active ||
+            contract.status == ContractStatus.funded);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -660,6 +816,27 @@ class _ContractsScreenState extends State<ContractsScreen>
                 ),
               ],
             ),
+
+            // Escrow action buttons
+            if (canActOnEscrow) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _actionButton(
+                    icon: Icons.lock_open,
+                    label: 'Release',
+                    color: AppTheme.successGreen,
+                    onTap: () => _releaseEscrow(contract),
+                  ),
+                  _actionButton(
+                    icon: Icons.undo,
+                    label: 'Refund',
+                    color: AppTheme.warningOrange,
+                    onTap: () => _refundEscrow(contract),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),

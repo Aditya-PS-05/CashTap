@@ -2,14 +2,20 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 
+type DisplayCurrency = "BCH" | "USD";
+
 interface PriceState {
   bchUsd: number;
   loading: boolean;
+  displayCurrency: DisplayCurrency;
 }
 
 interface PriceContextType extends PriceState {
   formatUsd: (satoshis: bigint | number | string) => string;
   formatBch: (satoshis: bigint | number | string) => string;
+  formatPrimary: (satoshis: bigint | number | string) => string;
+  formatSecondary: (satoshis: bigint | number | string) => string;
+  setDisplayCurrency: (currency: DisplayCurrency) => void;
 }
 
 const PriceContext = createContext<PriceContextType | null>(null);
@@ -18,14 +24,18 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-product
 const REFRESH_INTERVAL = 60_000; // 60 seconds
 
 export function PriceProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<PriceState>({ bchUsd: 0, loading: true });
+  const [state, setState] = useState<PriceState>({
+    bchUsd: 0,
+    loading: true,
+    displayCurrency: "BCH",
+  });
 
   const fetchPrice = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/price`);
       if (res.ok) {
         const data = await res.json();
-        setState({ bchUsd: data.bch_usd, loading: false });
+        setState((s) => ({ ...s, bchUsd: data.bch_usd, loading: false }));
       }
     } catch {
       // Keep last known price on failure
@@ -38,6 +48,23 @@ export function PriceProvider({ children }: { children: ReactNode }) {
     const timer = setInterval(fetchPrice, REFRESH_INTERVAL);
     return () => clearInterval(timer);
   }, [fetchPrice]);
+
+  // Load display currency preference from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("bchpay_display_currency");
+      if (saved === "BCH" || saved === "USD") {
+        setState((s) => ({ ...s, displayCurrency: saved }));
+      }
+    } catch {}
+  }, []);
+
+  const setDisplayCurrency = useCallback((currency: DisplayCurrency) => {
+    setState((s) => ({ ...s, displayCurrency: currency }));
+    try {
+      localStorage.setItem("bchpay_display_currency", currency);
+    } catch {}
+  }, []);
 
   const formatUsd = useCallback(
     (satoshis: bigint | number | string): string => {
@@ -58,8 +85,31 @@ export function PriceProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const formatPrimary = useCallback(
+    (satoshis: bigint | number | string): string => {
+      return state.displayCurrency === "USD" ? formatUsd(satoshis) : formatBch(satoshis);
+    },
+    [state.displayCurrency, formatUsd, formatBch],
+  );
+
+  const formatSecondary = useCallback(
+    (satoshis: bigint | number | string): string => {
+      return state.displayCurrency === "USD" ? formatBch(satoshis) : formatUsd(satoshis);
+    },
+    [state.displayCurrency, formatUsd, formatBch],
+  );
+
   return (
-    <PriceContext.Provider value={{ ...state, formatUsd, formatBch }}>
+    <PriceContext.Provider
+      value={{
+        ...state,
+        formatUsd,
+        formatBch,
+        formatPrimary,
+        formatSecondary,
+        setDisplayCurrency,
+      }}
+    >
       {children}
     </PriceContext.Provider>
   );

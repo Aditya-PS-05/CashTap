@@ -39,11 +39,23 @@ enum ContractType {
 
 enum ContractStatus {
   active,
+  funded,
+  released,
+  refunded,
+  disputed,
   completed,
   expired;
 
   static ContractStatus fromString(String value) {
     switch (value.toUpperCase()) {
+      case 'FUNDED':
+        return ContractStatus.funded;
+      case 'RELEASED':
+        return ContractStatus.released;
+      case 'REFUNDED':
+        return ContractStatus.refunded;
+      case 'DISPUTED':
+        return ContractStatus.disputed;
       case 'COMPLETED':
         return ContractStatus.completed;
       case 'EXPIRED':
@@ -57,6 +69,14 @@ enum ContractStatus {
     switch (this) {
       case ContractStatus.active:
         return 'Active';
+      case ContractStatus.funded:
+        return 'Funded';
+      case ContractStatus.released:
+        return 'Released';
+      case ContractStatus.refunded:
+        return 'Refunded';
+      case ContractStatus.disputed:
+        return 'Disputed';
       case ContractStatus.completed:
         return 'Completed';
       case ContractStatus.expired:

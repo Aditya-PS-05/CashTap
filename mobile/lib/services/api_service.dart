@@ -339,6 +339,53 @@ class ApiService {
     }
   }
 
+  Future<ContractInstance> createMultiSplitPayment({
+    required List<Map<String, dynamic>> recipients,
+  }) async {
+    try {
+      final response = await _dio.post('/api/contracts/split-payment-multi', data: {
+        'recipients': recipients,
+      });
+      final data = response.data as Map<String, dynamic>;
+      return ContractInstance.fromJson(data['contract'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(e.response?.data?['error'] ?? 'Failed to create multi-split payment');
+    }
+  }
+
+  Future<ContractInstance> releaseEscrow(String id) async {
+    try {
+      final response = await _dio.post('/api/contracts/$id/release');
+      final data = response.data as Map<String, dynamic>;
+      return ContractInstance.fromJson(data['contract'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(e.response?.data?['error'] ?? 'Failed to release escrow');
+    }
+  }
+
+  Future<ContractInstance> refundEscrow(String id) async {
+    try {
+      final response = await _dio.post('/api/contracts/$id/refund');
+      final data = response.data as Map<String, dynamic>;
+      return ContractInstance.fromJson(data['contract'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(e.response?.data?['error'] ?? 'Failed to refund escrow');
+    }
+  }
+
+  Future<Map<String, dynamic>> getPaymentLinkStats(String id) async {
+    try {
+      final response = await _dio.get('/api/payment-links/$id/stats');
+      return response.data as Map<String, dynamic>;
+    } on DioException {
+      return {
+        'total_collected_satoshis': 0,
+        'payment_count': 0,
+        'last_payment_at': null,
+      };
+    }
+  }
+
   Future<ContractInstance> updateContractStatus(String id, String status) async {
     try {
       final response = await _dio.patch('/api/contracts/$id/status', data: {

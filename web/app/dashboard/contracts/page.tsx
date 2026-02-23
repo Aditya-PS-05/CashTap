@@ -15,8 +15,14 @@ import {
   Split,
   ShieldCheck,
   PiggyBank,
+  Plus,
+  Trash2,
+  Eye,
+  ArrowRight,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
+import { usePrice } from "@/lib/price-context";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
 
@@ -26,8 +32,23 @@ interface ContractInstance {
   address: string;
   token_address: string | null;
   constructor_args: Record<string, unknown>;
-  status: "ACTIVE" | "COMPLETED" | "EXPIRED";
+  status: string;
   created_at: string;
+}
+
+interface Recipient {
+  pkh: string;
+  percent: number;
+  label: string;
+}
+
+interface PreviewShare {
+  pkh: string;
+  label: string;
+  percent: number;
+  satoshis: number;
+  bch: string;
+  usd: string | null;
 }
 
 const typeBadgeColors: Record<string, string> = {
@@ -36,22 +57,42 @@ const typeBadgeColors: Record<string, string> = {
   SAVINGS_VAULT: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300",
 };
 
+const statusBadgeVariants: Record<string, string> = {
+  ACTIVE: "success",
+  FUNDED: "default",
+  RELEASED: "secondary",
+  REFUNDED: "warning",
+  DISPUTED: "destructive",
+  COMPLETED: "secondary",
+  EXPIRED: "warning",
+};
+
 const typeLabels: Record<string, string> = {
   ESCROW: "Escrow",
   SPLIT_PAYMENT: "Split Payment",
   SAVINGS_VAULT: "Savings Vault",
 };
 
+const useCaseBadges = [
+  { label: "Team Payouts", color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300" },
+  { label: "Revenue Sharing", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300" },
+  { label: "Tips", color: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300" },
+  { label: "Affiliate Commissions", color: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300" },
+];
+
 export default function ContractsPage() {
   const [contracts, setContracts] = useState<ContractInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const { formatBch, formatUsd } = usePrice();
 
-  // Split Payment form state
-  const [sp_r1, setSp_r1] = useState("");
-  const [sp_r2, setSp_r2] = useState("");
-  const [sp_p1, setSp_p1] = useState("50");
-  const [sp_p2, setSp_p2] = useState("50");
+  // N-recipient split form
+  const [recipients, setRecipients] = useState<Recipient[]>([
+    { pkh: "", percent: 50, label: "" },
+    { pkh: "", percent: 50, label: "" },
+  ]);
+  const [previewShares, setPreviewShares] = useState<PreviewShare[] | null>(null);
+  const [previewTotal, setPreviewTotal] = useState("1000000");
 
   // Escrow form state
   const [esc_buyer, setEsc_buyer] = useState("");
@@ -118,7 +159,27 @@ export default function ContractsPage() {
     }
   };
 
-  const updateStatus = async (id: string, status: "COMPLETED" | "EXPIRED") => {
+  const contractAction = async (id: string, action: string) => {
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${API_BASE}/api/contracts/${id}/${action}`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        toast.success(`Contract ${action} successful`);
+        fetchContracts();
+      } else {
+        const err = await res.json();
+        toast.error(err.error || `Failed to ${action}`);
+      }
+    } catch {
+      toast.error(`Failed to ${action}`);
+    }
+  };
+
+  const updateStatus = async (id: string, status: string) => {
     try {
       const headers = await getAuthHeaders();
       const res = await fetch(`${API_BASE}/api/contracts/${id}/status`, {
@@ -138,13 +199,56 @@ export default function ContractsPage() {
     }
   };
 
+  const fetchPreview = async () => {
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${API_BASE}/api/contracts/split-payment/preview`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipients: recipients.map((r) => ({
+            pkh: r.pkh || undefined,
+            percent: r.percent,
+            label: r.label || undefined,
+          })),
+          total_satoshis: Number(previewTotal),
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPreviewShares(data.shares);
+      }
+    } catch {
+      toast.error("Failed to load preview");
+    }
+  };
+
+  const addRecipient = () => {
+    if (recipients.length >= 10) return;
+    setRecipients([...recipients, { pkh: "", percent: 0, label: "" }]);
+  };
+
+  const removeRecipient = (index: number) => {
+    if (recipients.length <= 2) return;
+    setRecipients(recipients.filter((_, i) => i !== index));
+  };
+
+  const updateRecipient = (index: number, field: keyof Recipient, value: string | number) => {
+    const updated = [...recipients];
+    (updated[index] as any)[field] = value;
+    setRecipients(updated);
+    setPreviewShares(null);
+  };
+
+  const percentSum = recipients.reduce((s, r) => s + r.percent, 0);
+
   const copyAddress = (address: string, e: React.MouseEvent) => {
     e.stopPropagation();
     navigator.clipboard.writeText(address);
     toast.success("Address copied!");
   };
 
-  const activeCount = contracts.filter((c) => c.status === "ACTIVE").length;
+  const activeCount = contracts.filter((c) => ["ACTIVE", "FUNDED"].includes(c.status)).length;
   const splitCount = contracts.filter((c) => c.type === "SPLIT_PAYMENT").length;
   const escrowCount = contracts.filter((c) => c.type === "ESCROW").length;
 
@@ -206,54 +310,107 @@ export default function ContractsPage() {
             </TabsList>
 
             <TabsContent value="split-payment" className="space-y-4 pt-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="text-sm font-medium">Recipient 1 PKH (hex)</label>
-                  <Input
-                    placeholder="40-char hex public key hash"
-                    value={sp_r1}
-                    onChange={(e) => setSp_r1(e.target.value)}
-                    className="mt-1 font-mono text-xs"
-                  />
+              {/* Use case badges */}
+              <div className="flex flex-wrap gap-2">
+                {useCaseBadges.map((b) => (
+                  <span key={b.label} className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${b.color}`}>
+                    {b.label}
+                  </span>
+                ))}
+              </div>
+
+              {/* Dynamic recipients */}
+              <div className="space-y-3">
+                {recipients.map((r, i) => (
+                  <div key={i} className="flex gap-2 items-end">
+                    <div className="flex-1">
+                      <label className="text-xs font-medium">Recipient {i + 1} PKH</label>
+                      <Input
+                        placeholder="40-char hex public key hash"
+                        value={r.pkh}
+                        onChange={(e) => updateRecipient(i, "pkh", e.target.value)}
+                        className="mt-1 font-mono text-xs"
+                      />
+                    </div>
+                    <div className="w-20">
+                      <label className="text-xs font-medium">%</label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={99}
+                        value={r.percent}
+                        onChange={(e) => updateRecipient(i, "percent", Number(e.target.value))}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div className="w-32">
+                      <label className="text-xs font-medium">Label</label>
+                      <Input
+                        placeholder="Optional"
+                        value={r.label}
+                        onChange={(e) => updateRecipient(i, "label", e.target.value)}
+                        className="mt-1"
+                      />
+                    </div>
+                    {recipients.length > 2 && (
+                      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => removeRecipient(i)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-3">
+                {recipients.length < 10 && (
+                  <Button variant="outline" size="sm" onClick={addRecipient} className="gap-1">
+                    <Plus className="h-3 w-3" /> Add Recipient
+                  </Button>
+                )}
+                <span className={`text-sm font-medium ${percentSum === 100 ? "text-green-600" : "text-red-500"}`}>
+                  Total: {percentSum}%{percentSum !== 100 && " (must be 100%)"}
+                </span>
+              </div>
+
+              {/* Preview section */}
+              <div className="rounded-lg border p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Eye className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Preview Distribution</span>
                 </div>
-                <div>
-                  <label className="text-sm font-medium">Percentage</label>
+                <div className="flex gap-2 items-center">
                   <Input
                     type="number"
-                    min={1}
-                    max={99}
-                    value={sp_p1}
-                    onChange={(e) => {
-                      setSp_p1(e.target.value);
-                      setSp_p2(String(100 - Number(e.target.value)));
-                    }}
-                    className="mt-1"
+                    placeholder="Total satoshis"
+                    value={previewTotal}
+                    onChange={(e) => setPreviewTotal(e.target.value)}
+                    className="w-40"
                   />
+                  <Button variant="outline" size="sm" onClick={fetchPreview} disabled={percentSum !== 100}>
+                    Calculate
+                  </Button>
                 </div>
-                <div>
-                  <label className="text-sm font-medium">Recipient 2 PKH (hex)</label>
-                  <Input
-                    placeholder="40-char hex public key hash"
-                    value={sp_r2}
-                    onChange={(e) => setSp_r2(e.target.value)}
-                    className="mt-1 font-mono text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Percentage</label>
-                  <Input type="number" min={1} max={99} value={sp_p2} readOnly className="mt-1 bg-muted" />
-                </div>
+                {previewShares && (
+                  <div className="space-y-1">
+                    {previewShares.map((s, i) => (
+                      <div key={i} className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          {s.label || `Recipient ${i + 1}`} ({s.percent}%)
+                        </span>
+                        <span className="font-mono">
+                          {s.bch} BCH {s.usd && <span className="text-muted-foreground">(${s.usd})</span>}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
+
               <Button
                 onClick={() =>
-                  createContract("split-payment", {
-                    recipient1_pkh: sp_r1,
-                    recipient2_pkh: sp_r2,
-                    split1_percent: Number(sp_p1),
-                    split2_percent: Number(sp_p2),
-                  })
+                  createContract("split-payment-multi", { recipients })
                 }
-                disabled={creating}
+                disabled={creating || percentSum !== 100}
                 className="gap-2"
               >
                 {creating && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -376,6 +533,7 @@ export default function ContractsPage() {
                     <th className="p-4 font-medium">Type</th>
                     <th className="p-4 font-medium">Address</th>
                     <th className="p-4 font-medium">Status</th>
+                    <th className="p-4 font-medium">Details</th>
                     <th className="p-4 font-medium">Created</th>
                     <th className="p-4 font-medium">Actions</th>
                   </tr>
@@ -383,78 +541,118 @@ export default function ContractsPage() {
                 <tbody>
                   {contracts.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-8 text-center text-muted-foreground">
+                      <td colSpan={6} className="p-8 text-center text-muted-foreground">
                         No contracts deployed yet. Create your first one above!
                       </td>
                     </tr>
                   ) : (
-                    contracts.map((contract) => (
-                      <tr key={contract.id} className="border-b last:border-0 hover:bg-muted/50">
-                        <td className="p-4">
-                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${typeBadgeColors[contract.type]}`}>
-                            {typeLabels[contract.type]}
-                          </span>
-                        </td>
-                        <td className="p-4">
-                          <p className="font-mono text-xs">
-                            {contract.address.slice(0, 20)}...{contract.address.slice(-8)}
-                          </p>
-                        </td>
-                        <td className="p-4">
-                          <Badge
-                            variant={
-                              contract.status === "ACTIVE"
-                                ? "success"
-                                : contract.status === "COMPLETED"
-                                  ? "secondary"
-                                  : "warning"
-                            }
-                            className="text-xs"
-                          >
-                            {contract.status}
-                          </Badge>
-                        </td>
-                        <td className="p-4 text-sm text-muted-foreground">
-                          {new Date(contract.created_at).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                          })}
-                        </td>
-                        <td className="p-4">
-                          <div className="flex gap-1">
-                            {contract.status === "ACTIVE" && (
+                    contracts.map((contract) => {
+                      const args = contract.constructor_args || {};
+                      const isEscrow = contract.type === "ESCROW";
+                      const canRelease = isEscrow && ["ACTIVE", "FUNDED"].includes(contract.status);
+                      const canRefund = isEscrow && ["ACTIVE", "FUNDED"].includes(contract.status);
+
+                      return (
+                        <tr key={contract.id} className="border-b last:border-0 hover:bg-muted/50">
+                          <td className="p-4">
+                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${typeBadgeColors[contract.type]}`}>
+                              {typeLabels[contract.type]}
+                            </span>
+                          </td>
+                          <td className="p-4">
+                            <p className="font-mono text-xs">
+                              {contract.address.slice(0, 20)}...{contract.address.slice(-8)}
+                            </p>
+                          </td>
+                          <td className="p-4">
+                            <Badge
+                              variant={
+                                (statusBadgeVariants[contract.status] || "secondary") as any
+                              }
+                              className="text-xs"
+                            >
+                              {contract.status}
+                            </Badge>
+                          </td>
+                          <td className="p-4">
+                            {isEscrow && (
+                              <div className="text-xs text-muted-foreground space-y-0.5">
+                                <p>Buyer: {String(args.buyer_pkh || "").slice(0, 8)}...</p>
+                                <p>Seller: {String(args.seller_pkh || "").slice(0, 8)}...</p>
+                                <p>Arbiter: {String(args.arbiter_pkh || "").slice(0, 8)}...</p>
+                                {args.timeout != null && <p>Timeout: {String(args.timeout)}</p>}
+                              </div>
+                            )}
+                            {contract.type === "SPLIT_PAYMENT" && (
+                              <div className="text-xs text-muted-foreground">
+                                {Array.isArray(args.recipients)
+                                  ? `${(args.recipients as any[]).length} recipients`
+                                  : "2 recipients"}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-4 text-sm text-muted-foreground">
+                            {new Date(contract.created_at).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </td>
+                          <td className="p-4">
+                            <div className="flex gap-1 flex-wrap">
+                              {canRelease && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs text-green-600 border-green-300 hover:bg-green-50"
+                                  onClick={() => contractAction(contract.id, "release")}
+                                >
+                                  <ArrowRight className="h-3 w-3 mr-1" /> Release
+                                </Button>
+                              )}
+                              {canRefund && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs text-orange-600 border-orange-300 hover:bg-orange-50"
+                                  onClick={() => contractAction(contract.id, "refund")}
+                                >
+                                  <RotateCcw className="h-3 w-3 mr-1" /> Refund
+                                </Button>
+                              )}
+                              {contract.status === "ACTIVE" && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  title="Mark as completed"
+                                  onClick={() => updateStatus(contract.id, "COMPLETED")}
+                                >
+                                  <CheckCircle className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
                               <Button
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8"
-                                title="Mark as completed"
-                                onClick={() => updateStatus(contract.id, "COMPLETED")}
+                                title="Copy address"
+                                onClick={(e) => copyAddress(contract.address, e)}
                               >
-                                <CheckCircle className="h-3.5 w-3.5" />
+                                <Copy className="h-3.5 w-3.5" />
                               </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              title="Copy address"
-                              onClick={(e) => copyAddress(contract.address, e)}
-                            >
-                              <Copy className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" asChild title="View on explorer">
-                              <a
-                                href={`https://chipnet.chaingraph.cash/address/${contract.address}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                <ExternalLink className="h-3.5 w-3.5" />
-                              </a>
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                              <Button variant="ghost" size="icon" className="h-8 w-8" asChild title="View on explorer">
+                                <a
+                                  href={`https://chipnet.chaingraph.cash/address/${contract.address}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>

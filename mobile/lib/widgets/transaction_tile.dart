@@ -45,7 +45,7 @@ class TransactionTile extends StatelessWidget {
             ),
             const SizedBox(width: 14),
 
-            // Amount + address
+            // Amount — show both BCH + USD
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -65,6 +65,18 @@ class TransactionTile extends StatelessWidget {
                       fontSize: 12,
                     ),
                   ),
+                  if (transaction.memo.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      transaction.memo,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ],
               ),
             ),

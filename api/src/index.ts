@@ -12,6 +12,8 @@ import deviceRoutes from "./routes/devices.js";
 import contractRoutes from "./routes/contracts.js";
 import cashtokenRoutes from "./routes/cashtokens.js";
 import priceRoutes from "./routes/price.js";
+import checkoutRoutes from "./routes/checkout.js";
+import { rateLimiter } from "./middleware/rate-limit.js";
 
 const app = new Hono();
 
@@ -24,8 +26,8 @@ app.use(
   cors({
     origin: process.env.CORS_ORIGIN || "*",
     allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization"],
-    exposeHeaders: ["X-Request-Id"],
+    allowHeaders: ["Content-Type", "Authorization", "x-api-key"],
+    exposeHeaders: ["X-Request-Id", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "Retry-After"],
     maxAge: 86400,
   })
 );
@@ -93,7 +95,7 @@ app.get("/api/health", (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// Route groups
+// Route groups — original /api/ prefix (backward compat)
 // ---------------------------------------------------------------------------
 
 app.route("/api/auth", authRoutes);
@@ -105,6 +107,24 @@ app.route("/api/devices", deviceRoutes);
 app.route("/api/contracts", contractRoutes);
 app.route("/api/cashtokens", cashtokenRoutes);
 app.route("/api/price", priceRoutes);
+app.route("/api/checkout", checkoutRoutes);
+
+// ---------------------------------------------------------------------------
+// Route groups — versioned /api/v1/ prefix (with rate limiting)
+// ---------------------------------------------------------------------------
+
+app.use("/api/v1/*", rateLimiter);
+
+app.route("/api/v1/auth", authRoutes);
+app.route("/api/v1/merchants", merchantRoutes);
+app.route("/api/v1/payment-links", paymentLinkRoutes);
+app.route("/api/v1/transactions", transactionRoutes);
+app.route("/api/v1/invoices", invoiceRoutes);
+app.route("/api/v1/devices", deviceRoutes);
+app.route("/api/v1/contracts", contractRoutes);
+app.route("/api/v1/cashtokens", cashtokenRoutes);
+app.route("/api/v1/price", priceRoutes);
+app.route("/api/v1/checkout", checkoutRoutes);
 
 // ---------------------------------------------------------------------------
 // Start server
