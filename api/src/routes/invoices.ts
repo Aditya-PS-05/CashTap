@@ -249,14 +249,53 @@ invoices.post("/:id/send", authMiddleware, async (c) => {
   const invoice = await prisma.invoice.update({
     where: { id },
     data: { status: "SENT" },
+    include: {
+      merchant: {
+        select: { business_name: true, bch_address: true },
+      },
+    },
   });
 
-  // TODO: Send email notification to customer_email if set
-  // TODO: Create webhook event for invoice.sent
+  // Send email notification to customer
+  let emailSent = false;
+  if (invoice.customer_email) {
+    try {
+      const { emailService } = await import("../services/email.js");
+      const totalSats = Number(invoice.total_satoshis);
+      const totalBch = (totalSats / 1e8).toFixed(8);
+      const items = (invoice.items as any[]) || [];
+
+      const result = await emailService.sendInvoice({
+        to: invoice.customer_email,
+        invoiceId: invoice.id,
+        merchantName: invoice.merchant.business_name,
+        totalBch,
+        totalUsd: "0.00", // USD conversion happens client-side
+        dueDate: invoice.due_date?.toISOString().split("T")[0] ?? null,
+        items,
+      });
+      emailSent = result.sent;
+    } catch {
+      // Email sending is best-effort
+    }
+  }
+
+  // Create webhook event for invoice.sent
+  try {
+    const { webhookService } = await import("../services/webhook.js");
+    await webhookService.deliver(merchantId, "invoice.sent", {
+      invoice_id: id,
+      customer_email: invoice.customer_email,
+      total_satoshis: invoice.total_satoshis.toString(),
+    });
+  } catch {
+    // Webhook delivery is best-effort
+  }
 
   return c.json({
     invoice: serializeInvoice(invoice),
-    message: "Invoice marked as sent",
+    message: emailSent ? "Invoice sent to customer" : "Invoice marked as sent",
+    email_sent: emailSent,
   });
 });
 

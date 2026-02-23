@@ -229,7 +229,8 @@ class PaymentProvider extends ChangeNotifier {
       try {
         final status = await _apiService.getPaymentLinkStatus(slug);
 
-        if (status.status == PaymentLinkStatus.paid) {
+        // API sets single-use links to INACTIVE when paid
+        if (status.isPaid) {
           if (_listenStatus != PaymentListenStatus.confirmed) {
             _listenStatus = PaymentListenStatus.detected;
             notifyListeners();
@@ -296,21 +297,23 @@ class PaymentProvider extends ChangeNotifier {
   }
 
   /// Fetch dashboard stats.
+  /// API returns { confirmed: { count, total_satoshis }, pending: { count, total_satoshis }, failed_count }.
   Future<void> fetchDashboardStats() async {
     try {
       final stats = await _apiService.getDashboardStats();
-      _todayRevenueBch = (stats['today_revenue_bch'] as num?)?.toDouble() ?? 0;
-      _todayRevenueUsd = (stats['today_revenue_usd'] as num?)?.toDouble() ?? 0;
-      _todayTxCount = stats['today_tx_count'] as int? ?? 0;
-      _pendingCount = stats['pending_count'] as int? ?? 0;
-      _weekRevenue = (stats['week_revenue'] as List<dynamic>?)
-              ?.map((e) => (e as num).toDouble())
-              .toList() ??
-          [];
-      _weekLabels = (stats['week_labels'] as List<dynamic>?)
-              ?.map((e) => e as String)
-              .toList() ??
-          [];
+      final confirmed = stats['confirmed'] as Map<String, dynamic>? ?? {};
+      final pending = stats['pending'] as Map<String, dynamic>? ?? {};
+
+      final totalSats =
+          int.tryParse(confirmed['total_satoshis']?.toString() ?? '0') ?? 0;
+      _todayRevenueBch = totalSats / 100000000.0;
+      _todayTxCount = confirmed['count'] as int? ?? 0;
+      _pendingCount = pending['count'] as int? ?? 0;
+
+      // USD conversion will be updated when BCH price is available
+      _todayRevenueUsd = 0;
+
+      // Week chart data comes from fetchAnalytics('7d'), not the stats endpoint
       notifyListeners();
     } catch (e) {
       debugPrint('Failed to fetch dashboard stats: $e');

@@ -45,22 +45,26 @@ class ApiService {
 
   // ---- Auth ----
 
-  Future<Map<String, dynamic>> createWallet() async {
-    final response = await _dio.post('/auth/wallet/create');
-    return response.data as Map<String, dynamic>;
-  }
-
-  Future<Map<String, dynamic>> importWallet(String seedPhrase) async {
-    final response = await _dio.post('/auth/wallet/import', data: {
-      'seed_phrase': seedPhrase,
+  /// Request a challenge nonce for the given BCH address.
+  /// Returns { nonce, message, expires_in }.
+  Future<Map<String, dynamic>> requestChallenge(String address) async {
+    final response = await _dio.post('/api/auth/challenge', data: {
+      'address': address,
     });
     return response.data as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> login(String walletAddress, String signature) async {
-    final response = await _dio.post('/api/v1/auth/verify', data: {
-      'wallet_address': walletAddress,
+  /// Verify a signed challenge and obtain JWT tokens.
+  /// Returns { access_token, refresh_token, token_type, expires_in, merchant }.
+  Future<Map<String, dynamic>> verifyChallenge({
+    required String address,
+    required String signature,
+    required String nonce,
+  }) async {
+    final response = await _dio.post('/api/auth/verify', data: {
+      'address': address,
       'signature': signature,
+      'nonce': nonce,
     });
     return response.data as Map<String, dynamic>;
   }
@@ -89,7 +93,7 @@ class ApiService {
   }
 
   Future<Merchant> updateMerchant(Map<String, dynamic> updates) async {
-    final response = await _dio.patch('/api/merchants/me', data: updates);
+    final response = await _dio.put('/api/merchants/me', data: updates);
     final data = response.data as Map<String, dynamic>;
     final merchant = data['merchant'] as Map<String, dynamic>? ?? data;
     return Merchant.fromJson(merchant);

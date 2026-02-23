@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const data = await res.json();
         if (data.address) {
           // Fetch merchant profile
-          const merchantRes = await fetch(`${API_BASE}/merchants/me`, {
+          const merchantRes = await fetch(`${API_BASE}/api/merchants/me`, {
             headers: { Authorization: `Bearer ${data.accessToken}` },
           });
           const merchant = merchantRes.ok ? await merchantRes.json() : null;
@@ -68,25 +68,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (address: string, signFn: (msg: string) => Promise<string>) => {
     // 1. Request challenge from API
-    const challengeRes = await fetch(`${API_BASE}/auth/challenge`, {
+    const challengeRes = await fetch(`${API_BASE}/api/auth/challenge`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ address }),
     });
     if (!challengeRes.ok) throw new Error("Failed to get challenge");
-    const { challenge } = await challengeRes.json();
+    const { nonce, message } = await challengeRes.json();
 
-    // 2. Sign the challenge
-    const signature = await signFn(challenge);
+    // 2. Sign the challenge message
+    const signature = await signFn(message);
 
     // 3. Verify signature with API
-    const verifyRes = await fetch(`${API_BASE}/auth/verify`, {
+    const verifyRes = await fetch(`${API_BASE}/api/auth/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ address, signature, challenge }),
+      body: JSON.stringify({ address, signature, nonce }),
     });
     if (!verifyRes.ok) throw new Error("Signature verification failed");
-    const { accessToken, refreshToken, merchant } = await verifyRes.json();
+    const data = await verifyRes.json();
+    const accessToken = data.access_token;
+    const refreshToken = data.refresh_token;
+    const merchant = data.merchant;
 
     // 4. Store tokens in httpOnly cookie via route handler
     await fetch("/api/auth/session", {

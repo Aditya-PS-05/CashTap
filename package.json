@@ -25,5 +25,9 @@
   "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@scure/bip32": "^2.0.1",
+    "@scure/bip39": "^2.0.1"
   }
 }

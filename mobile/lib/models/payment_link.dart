@@ -169,7 +169,7 @@ class PaymentLink {
   }
 
   bool get isExpired => DateTime.now().isAfter(expiresAt);
-  bool get isPaid => status == PaymentLinkStatus.paid;
+  bool get isPaid => status == PaymentLinkStatus.paid || status == PaymentLinkStatus.inactive;
   bool get isRecurring => type == PaymentLinkType.recurring;
 
   String get paymentUri =>

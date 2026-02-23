@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:confetti/confetti.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -405,9 +406,9 @@ class _ChargeScreenState extends State<ChargeScreen>
                     ),
                   ],
 
-                  // Simulate button (for demo)
+                  // Simulate button (debug only)
                   const SizedBox(height: 24),
-                  if (effectiveStatus == PaymentListenStatus.waiting)
+                  if (kDebugMode && effectiveStatus == PaymentListenStatus.waiting)
                     TextButton(
                       onPressed: () {
                         context

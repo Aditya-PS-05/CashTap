@@ -75,7 +75,7 @@ export default function PaymentLinksPage() {
   const [activeContracts, setActiveContracts] = useState<any[]>([]);
   const [expandedLink, setExpandedLink] = useState<string | null>(null);
   const [linkStats, setLinkStats] = useState<Record<string, any>>({});
-  const { formatBch, formatUsd } = usePrice();
+  const { formatBch, formatUsd, bchUsd } = usePrice();
 
   const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
     try {
@@ -176,8 +176,8 @@ export default function PaymentLinksPage() {
       return;
     }
 
-    // Convert USD to satoshis (rough estimate — price context gives us the rate)
-    const amountSatoshis = Math.round(parseFloat(amountStr) * 100_000); // placeholder conversion
+    // Amount is entered in satoshis directly (label says "Amount (satoshis)")
+    const amountSatoshis = Math.round(parseFloat(amountStr));
 
     try {
       const headers = await getAuthHeaders();

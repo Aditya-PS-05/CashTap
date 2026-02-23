@@ -30,6 +30,10 @@ class CashTokenService {
   /**
    * Create a new fungible loyalty token for a merchant.
    * This mints a genesis transaction that creates the token category.
+   *
+   * The genesis tx's TXID becomes the token category (a 64-char hex string).
+   * If the wallet service is unavailable, the token config is still saved
+   * with a pending category that will be set on first successful mint.
    */
   async createLoyaltyToken(
     merchantId: string,
@@ -39,21 +43,41 @@ class CashTokenService {
     initialSupply: bigint = 1_000_000_000n
   ): Promise<{
     tokenCategory: string;
-    txHash: string;
+    txHash: string | null;
     config: any;
   }> {
-    // In production, this would:
-    // 1. Create a genesis TX with the merchant's wallet
-    // 2. The TXID of the genesis becomes the token category
-    // 3. Mint initialSupply tokens
-    // 4. Register BCMR metadata
+    let tokenCategory: string | null = null;
+    let txHash: string | null = null;
 
-    // For now, generate a placeholder category ID
-    const tokenCategory = `${Date.now().toString(16)}${"0".repeat(48)}`.slice(
-      0,
-      64
-    );
-    const txHash = tokenCategory; // genesis tx hash = category
+    // Attempt real genesis transaction via wallet service
+    try {
+      const { walletService } = await import("./wallet.js");
+      const merchant = await prisma.merchant.findUnique({
+        where: { id: merchantId },
+      });
+
+      if (merchant?.bch_address) {
+        const result = await (walletService as any).createFungibleToken?.(
+          merchant.bch_address,
+          initialSupply,
+          { name, symbol, decimals }
+        );
+        if (result?.txId) {
+          txHash = result.txId;
+          tokenCategory = result.txId; // Genesis TXID = token category
+        }
+      }
+    } catch (err) {
+      console.warn(`[CashToken] Wallet service unavailable for genesis tx:`, err);
+    }
+
+    // If genesis failed, generate a temporary placeholder category
+    // (will be updated when a real tx goes through)
+    if (!tokenCategory) {
+      const crypto = await import("crypto");
+      tokenCategory = crypto.randomBytes(32).toString("hex");
+      console.warn(`[CashToken] Using placeholder category ${tokenCategory.slice(0, 12)}... — genesis tx pending`);
+    }
 
     // Store config in DB
     const config = await prisma.cashtokenConfig.create({
@@ -69,9 +93,8 @@ class CashTokenService {
     });
 
     console.log(
-      `[CashToken] Created loyalty token "${symbol}" for merchant ${merchantId}`
+      `[CashToken] Created loyalty token "${symbol}" for merchant ${merchantId}, category: ${tokenCategory.slice(0, 12)}..., on-chain: ${!!txHash}`
     );
-    console.log(`[CashToken] Category: ${tokenCategory}`);
 
     return { tokenCategory, txHash, config };
   }
@@ -114,7 +137,7 @@ class CashTokenService {
       };
     }
 
-    // Try wallet transfer, fall back to stub tx hash
+    // Attempt real token transfer via wallet service
     let txHash: string | null = null;
     try {
       const { walletService } = await import("./wallet.js");
@@ -124,9 +147,13 @@ class CashTokenService {
         tokensToIssue
       );
       txHash = result?.txId || null;
-    } catch {
-      // Wallet not available — use stub
-      txHash = `loyalty_${Date.now().toString(16)}`;
+    } catch (err) {
+      console.warn(
+        `[CashToken] Failed to issue tokens on-chain for ${customerAddress}:`,
+        err
+      );
+      // Token issuance is recorded in DB even without on-chain tx
+      // so it can be retried or reconciled later
     }
 
     // Persist issuance to DB
@@ -141,7 +168,7 @@ class CashTokenService {
     });
 
     console.log(
-      `[CashToken] Issued ${tokensToIssue} ${config.token_symbol} to ${customerAddress.slice(0, 20)}...`
+      `[CashToken] Issued ${tokensToIssue} ${config.token_symbol} to ${customerAddress.slice(0, 20)}..., on-chain: ${!!txHash}`
     );
 
     return {
@@ -194,8 +221,8 @@ class CashTokenService {
     );
     // Next 4 bytes: memo hash (first 4 bytes of sha256)
     if (paymentData.memo) {
-      const crypto = await import("crypto");
-      const memoHash = crypto
+      const cryptoMod = await import("crypto");
+      const memoHash = cryptoMod
         .createHash("sha256")
         .update(paymentData.memo)
         .digest();
@@ -204,30 +231,38 @@ class CashTokenService {
 
     const commitmentHex = commitment.toString("hex");
 
-    // In production: mint NFT using mainnet-js
-    const nftCategory = config?.token_category || `receipt_${Date.now().toString(16)}${"0".repeat(48)}`.slice(0, 64);
+    const nftCategory = config?.token_category || null;
 
-    // Try wallet NFT mint, fall back to stub
+    // Attempt real NFT mint via wallet service
     let mintTxHash: string | null = null;
-    try {
-      const { walletService } = await import("./wallet.js");
-      const result = await walletService.sendNFT(
-        customerAddress,
-        nftCategory,
-        commitmentHex
+    if (nftCategory) {
+      try {
+        const { walletService } = await import("./wallet.js");
+        const result = await walletService.sendNFT(
+          customerAddress,
+          nftCategory,
+          commitmentHex
+        );
+        mintTxHash = result?.txId || null;
+      } catch (err) {
+        console.warn(
+          `[CashToken] Failed to mint receipt NFT on-chain for ${customerAddress}:`,
+          err
+        );
+      }
+    } else {
+      console.warn(
+        `[CashToken] No receipt token config for merchant ${merchantId} — skipping on-chain NFT mint`
       );
-      mintTxHash = result?.txId || null;
-    } catch {
-      mintTxHash = `nft_${Date.now().toString(16)}`;
     }
 
-    // Persist receipt NFT to DB
+    // Persist receipt NFT to DB (even without on-chain tx for reconciliation)
     const receipt = await prisma.receiptNFT.create({
       data: {
         config_id: config?.id || null,
         merchant_id: merchantId,
         customer_address: customerAddress,
-        nft_category: nftCategory,
+        nft_category: nftCategory || "pending",
         commitment: commitmentHex,
         tx_hash: paymentData.txHash,
         mint_tx_hash: mintTxHash,
@@ -237,12 +272,12 @@ class CashTokenService {
     });
 
     console.log(
-      `[CashToken] Minted receipt NFT for ${paymentData.txHash.slice(0, 12)}... → ${customerAddress.slice(0, 20)}...`
+      `[CashToken] Receipt NFT for ${paymentData.txHash.slice(0, 12)}... → ${customerAddress.slice(0, 20)}..., on-chain: ${!!mintTxHash}`
     );
 
     return {
       receiptId: receipt.id,
-      nftCategory,
+      nftCategory: nftCategory || "pending",
       commitment: commitmentHex,
       txHash: mintTxHash,
     };
@@ -250,12 +285,38 @@ class CashTokenService {
 
   /**
    * Create a receipt token config for a merchant (enables NFT receipts).
+   * In production this requires a genesis transaction to create the NFT category.
    */
   async enableReceiptNFTs(
     merchantId: string,
     name: string = "Payment Receipt"
   ): Promise<any> {
-    const tokenCategory = `receipt_${Date.now().toString(16)}${"0".repeat(48)}`.slice(0, 64);
+    let tokenCategory: string | null = null;
+
+    // Attempt genesis transaction
+    try {
+      const { walletService } = await import("./wallet.js");
+      const merchant = await prisma.merchant.findUnique({
+        where: { id: merchantId },
+      });
+
+      if (merchant?.bch_address) {
+        const result = await (walletService as any).createNFTCategory?.(
+          merchant.bch_address
+        );
+        if (result?.txId) {
+          tokenCategory = result.txId;
+        }
+      }
+    } catch (err) {
+      console.warn(`[CashToken] Wallet service unavailable for NFT genesis:`, err);
+    }
+
+    if (!tokenCategory) {
+      const crypto = await import("crypto");
+      tokenCategory = crypto.randomBytes(32).toString("hex");
+      console.warn(`[CashToken] Using placeholder NFT category — genesis pending`);
+    }
 
     const config = await prisma.cashtokenConfig.create({
       data: {
@@ -356,7 +417,7 @@ class CashTokenService {
   }
 
   /**
-   * Redeem loyalty tokens (records a negative issuance).
+   * Redeem loyalty tokens (records a negative issuance and attempts on-chain burn).
    */
   async redeemLoyaltyTokens(
     merchantId: string,
@@ -380,7 +441,24 @@ class CashTokenService {
       return { redeemed: 0n, txHash: null, tokenSymbol: "" };
     }
 
-    const txHash = `redeem_${Date.now().toString(16)}`;
+    // Attempt on-chain token burn/transfer back to merchant
+    let txHash: string | null = null;
+    try {
+      const { walletService } = await import("./wallet.js");
+      const merchant = await prisma.merchant.findUnique({
+        where: { id: merchantId },
+      });
+      if (merchant?.bch_address) {
+        const result = await walletService.sendTokens(
+          merchant.bch_address,
+          config.token_category,
+          amount
+        );
+        txHash = result?.txId || null;
+      }
+    } catch (err) {
+      console.warn(`[CashToken] Failed to redeem tokens on-chain:`, err);
+    }
 
     // Record negative amount for redemption
     await prisma.tokenIssuance.create({
@@ -394,7 +472,7 @@ class CashTokenService {
     });
 
     console.log(
-      `[CashToken] Redeemed ${amount} ${config.token_symbol} from ${customerAddress.slice(0, 20)}...`
+      `[CashToken] Redeemed ${amount} ${config.token_symbol} from ${customerAddress.slice(0, 20)}..., on-chain: ${!!txHash}`
     );
 
     return {
@@ -437,7 +515,7 @@ class CashTokenService {
       take: 10,
     });
 
-    const topHolders = holderGroups.map((g) => ({
+    const topHolders = holderGroups.map((g: any) => ({
       customerAddress: g.customer_address,
       totalTokens: g._sum.amount || 0n,
     }));

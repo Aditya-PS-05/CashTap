@@ -4,14 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Wallet, KeyRound, ArrowRight, Globe, Loader2 } from "lucide-react";
+import { Wallet, KeyRound, ArrowRight, Globe, Loader2, Copy, Check } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { isPaytacaAvailable, connectPaytaca } from "@/lib/paytaca";
+import { createWallet, deriveFromMnemonic, signMessage, isValidMnemonic } from "@/lib/bch-wallet";
 
-type Mode = "choose" | "import" | "create";
+type Mode = "choose" | "import" | "create" | "show-seed";
 
 export default function AuthPage() {
   const router = useRouter();
@@ -19,14 +19,16 @@ export default function AuthPage() {
   const [mode, setMode] = useState<Mode>("choose");
   const [loading, setLoading] = useState(false);
   const [seedPhrase, setSeedPhrase] = useState("");
+  const [generatedSeed, setGeneratedSeed] = useState("");
+  const [seedCopied, setSeedCopied] = useState(false);
 
   const paytacaAvailable = typeof window !== "undefined" && isPaytacaAvailable();
 
   const handlePaytaca = async () => {
     setLoading(true);
     try {
-      const { address, signMessage } = await connectPaytaca();
-      await login(address, signMessage);
+      const { address, signMessage: signFn } = await connectPaytaca();
+      await login(address, signFn);
       toast.success("Connected with Paytaca!");
       router.push("/dashboard");
     } catch (err) {
@@ -39,15 +41,16 @@ export default function AuthPage() {
   const handleCreateWallet = async () => {
     setLoading(true);
     try {
-      // Generate a demo address for now — in production this would use a BIP39 library
-      const demoAddress = `bitcoincash:qz${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+      const wallet = createWallet();
+      setGeneratedSeed(wallet.mnemonic);
+      setMode("show-seed");
+
+      // Store keys in memory for the sign function
       const signFn = async (message: string) => {
-        // Demo sign function — in production this signs with the generated private key
-        return btoa(message + demoAddress);
+        return signMessage(wallet.privateKey, message);
       };
-      await login(demoAddress, signFn);
+      await login(wallet.address, signFn);
       toast.success("Wallet created!");
-      router.push("/onboarding");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create wallet");
     } finally {
@@ -55,25 +58,40 @@ export default function AuthPage() {
     }
   };
 
+  const handleSeedContinue = () => {
+    router.push("/onboarding");
+  };
+
+  const copySeed = () => {
+    navigator.clipboard.writeText(generatedSeed);
+    setSeedCopied(true);
+    toast.success("Seed phrase copied!");
+    setTimeout(() => setSeedCopied(false), 2000);
+  };
+
   const handleImport = async () => {
-    if (!seedPhrase.trim()) {
+    const trimmed = seedPhrase.trim();
+    if (!trimmed) {
       toast.error("Please enter your seed phrase");
       return;
     }
-    const words = seedPhrase.trim().split(/\s+/);
+    const words = trimmed.split(/\s+/);
     if (words.length !== 12 && words.length !== 24) {
       toast.error("Seed phrase must be 12 or 24 words");
+      return;
+    }
+    if (!isValidMnemonic(trimmed)) {
+      toast.error("Invalid seed phrase — check your words and try again");
       return;
     }
 
     setLoading(true);
     try {
-      // Derive address from seed — in production this uses BIP39/BIP44
-      const demoAddress = `bitcoincash:qz${words[0]}${Date.now().toString(36).slice(-6)}`;
+      const wallet = deriveFromMnemonic(trimmed);
       const signFn = async (message: string) => {
-        return btoa(message + demoAddress);
+        return signMessage(wallet.privateKey, message);
       };
-      await login(demoAddress, signFn);
+      await login(wallet.address, signFn);
       toast.success("Wallet imported!");
       router.push("/dashboard");
     } catch (err) {
@@ -129,6 +147,28 @@ export default function AuthPage() {
               <p className="text-xs text-muted-foreground pt-2">
                 Your keys stay on your device. We never have access to your funds.
               </p>
+            </div>
+          )}
+
+          {mode === "show-seed" && (
+            <div className="space-y-4">
+              <div className="text-left">
+                <p className="text-sm font-medium text-destructive mb-2">
+                  Write down your seed phrase and store it safely. You will need it to recover your wallet.
+                </p>
+                <div className="rounded-md border bg-muted p-4">
+                  <p className="text-sm font-mono leading-relaxed break-words">{generatedSeed}</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1 gap-2" onClick={copySeed}>
+                  {seedCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                  {seedCopied ? "Copied" : "Copy"}
+                </Button>
+                <Button className="flex-1 gap-2" onClick={handleSeedContinue}>
+                  Continue <ArrowRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           )}
 

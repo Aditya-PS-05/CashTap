@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/constants.dart';
 import '../models/merchant.dart';
 import '../services/api_service.dart';
+import '../services/wallet_crypto_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
@@ -31,7 +32,8 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       final token = await _secureStorage.read(key: AppConstants.jwtTokenKey);
-      _walletAddress = await _secureStorage.read(key: AppConstants.walletAddressKey);
+      _walletAddress =
+          await _secureStorage.read(key: AppConstants.walletAddressKey);
 
       if (token != null && _walletAddress != null) {
         _isAuthenticated = true;
@@ -58,36 +60,44 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Create a new wallet
+  /// Create a new wallet client-side (BIP39) and authenticate via
+  /// challenge → sign → verify flow.
   Future<bool> createWallet() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final result = await _apiService.createWallet();
+      // 1. Generate wallet locally
+      final keys = WalletCryptoService.createWallet();
 
-      final token = result['token'] as String?;
-      final address = result['wallet_address'] as String?;
-      final seedPhrase = result['seed_phrase'] as String?;
+      // 2. Authenticate with the API
+      final authenticated = await _authenticateWithKeys(
+        keys.address,
+        keys.privateKey,
+        keys.publicKey,
+      );
 
-      if (token != null && address != null) {
-        await _secureStorage.write(key: AppConstants.jwtTokenKey, value: token);
-        await _secureStorage.write(key: AppConstants.walletAddressKey, value: address);
-        if (seedPhrase != null) {
-          await _secureStorage.write(key: AppConstants.seedPhraseKey, value: seedPhrase);
-        }
-
-        _walletAddress = address;
-        _isAuthenticated = true;
-        _isOnboarded = false;
-
+      if (!authenticated) {
+        _errorMessage = 'Failed to authenticate with server';
         _isLoading = false;
         notifyListeners();
-        return true;
+        return false;
       }
 
-      _errorMessage = 'Failed to create wallet';
+      // 3. Store seed phrase securely
+      await _secureStorage.write(
+        key: AppConstants.seedPhraseKey,
+        value: keys.mnemonic,
+      );
+
+      _walletAddress = keys.address;
+      _isAuthenticated = true;
+      _isOnboarded = false;
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
     } catch (e) {
       _errorMessage = 'Error creating wallet: $e';
       debugPrint(_errorMessage);
@@ -98,35 +108,44 @@ class AuthProvider extends ChangeNotifier {
     return false;
   }
 
-  /// Import wallet with seed phrase
+  /// Import wallet from a seed phrase and authenticate via
+  /// challenge → sign → verify flow.
   Future<bool> importWallet(String seedPhrase) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final result = await _apiService.importWallet(seedPhrase);
+      // 1. Derive keys from mnemonic locally
+      final keys = WalletCryptoService.deriveFromMnemonic(seedPhrase.trim());
 
-      final token = result['token'] as String?;
-      final address = result['wallet_address'] as String?;
+      // 2. Authenticate with the API
+      final authenticated = await _authenticateWithKeys(
+        keys.address,
+        keys.privateKey,
+        keys.publicKey,
+      );
 
-      if (address != null) {
-        if (token != null) {
-          await _secureStorage.write(key: AppConstants.jwtTokenKey, value: token);
-        }
-        await _secureStorage.write(key: AppConstants.walletAddressKey, value: address);
-        await _secureStorage.write(key: AppConstants.seedPhraseKey, value: seedPhrase);
-
-        _walletAddress = address;
-        _isAuthenticated = true;
-        _isOnboarded = false;
-
+      if (!authenticated) {
+        _errorMessage = 'Failed to authenticate with server';
         _isLoading = false;
         notifyListeners();
-        return true;
+        return false;
       }
 
-      _errorMessage = 'Failed to import wallet';
+      // 3. Store seed phrase securely
+      await _secureStorage.write(
+        key: AppConstants.seedPhraseKey,
+        value: keys.mnemonic,
+      );
+
+      _walletAddress = keys.address;
+      _isAuthenticated = true;
+      _isOnboarded = false;
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
     } catch (e) {
       _errorMessage = 'Error importing wallet: $e';
       debugPrint(_errorMessage);
@@ -135,6 +154,44 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = false;
     notifyListeners();
     return false;
+  }
+
+  /// Authenticate with the API using challenge → sign → verify.
+  Future<bool> _authenticateWithKeys(
+    String address,
+    Uint8List privateKey,
+    Uint8List publicKey,
+  ) async {
+    // Step 1: Request challenge
+    final challenge = await _apiService.requestChallenge(address);
+    final nonce = challenge['nonce'] as String;
+    final message = challenge['message'] as String;
+
+    // Step 2: Sign the challenge message
+    final signature =
+        WalletCryptoService.signMessage(privateKey, publicKey, message);
+
+    // Step 3: Verify signature with server
+    final result = await _apiService.verifyChallenge(
+      address: address,
+      signature: signature,
+      nonce: nonce,
+    );
+
+    final accessToken = result['access_token'] as String?;
+    if (accessToken == null) return false;
+
+    // Store tokens
+    await _secureStorage.write(
+      key: AppConstants.jwtTokenKey,
+      value: accessToken,
+    );
+    await _secureStorage.write(
+      key: AppConstants.walletAddressKey,
+      value: address,
+    );
+
+    return true;
   }
 
   /// Complete onboarding with merchant profile

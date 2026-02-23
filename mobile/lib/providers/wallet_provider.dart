@@ -32,9 +32,12 @@ class WalletProvider extends ChangeNotifier {
 
     try {
       final data = await _apiService.getWalletBalance();
-      _balanceSatoshis = data['balance_satoshis'] as int? ?? 0;
-      _balanceBch = (data['balance_bch'] as num?)?.toDouble() ?? BchService.satoshisToBch(_balanceSatoshis);
-      _balanceUsd = (data['balance_usd'] as num?)?.toDouble() ?? 0;
+      // API returns { confirmed: { count, total_satoshis }, pending: { ... } }
+      final confirmed = data['confirmed'] as Map<String, dynamic>? ?? {};
+      final totalSatsStr = confirmed['total_satoshis']?.toString() ?? '0';
+      _balanceSatoshis = int.tryParse(totalSatsStr) ?? 0;
+      _balanceBch = BchService.satoshisToBch(_balanceSatoshis);
+      _balanceUsd = BchService.bchToUsd(_balanceBch, _bchPriceUsd);
       _errorMessage = null;
     } catch (e) {
       _errorMessage = 'Failed to fetch balance: $e';
