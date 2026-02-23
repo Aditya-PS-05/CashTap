@@ -247,6 +247,19 @@ class ApiService {
     }
   }
 
+  // ---- Analytics ----
+
+  Future<Map<String, dynamic>> getAnalytics({String range = '7d'}) async {
+    try {
+      final response = await _dio.get('/transactions/analytics', queryParameters: {
+        'range': range,
+      });
+      return response.data as Map<String, dynamic>;
+    } on DioException {
+      return _mockAnalytics(range);
+    }
+  }
+
   // ---- Stats ----
 
   Future<Map<String, dynamic>> getDashboardStats() async {
@@ -523,6 +536,36 @@ class ApiService {
       'pending_count': 1,
       'week_revenue': [12.5, 18.3, 15.0, 22.1, 8.7, 31.2, 25.4],
       'week_labels': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    };
+  }
+
+  Map<String, dynamic> _mockAnalytics(String range) {
+    final days = range == '90d' ? 90 : range == '30d' ? 30 : 7;
+    final daily = List.generate(days, (i) {
+      final date = DateTime.now().subtract(Duration(days: days - 1 - i));
+      final sats = (50000 + (i * 12345) % 200000);
+      return {
+        'date': date.toIso8601String().split('T')[0],
+        'total_satoshis': sats.toString(),
+        'tx_count': 1 + (i % 5),
+        'total_usd': sats * 400.0 / 100000000,
+      };
+    });
+    final totalSats = daily.fold<int>(0, (sum, d) => sum + int.parse(d['total_satoshis'] as String));
+    final totalUsd = daily.fold<double>(0, (sum, d) => sum + (d['total_usd'] as double));
+    final totalTx = daily.fold<int>(0, (sum, d) => sum + (d['tx_count'] as int));
+    return {
+      'daily': daily,
+      'summary': {
+        'total_revenue_satoshis': totalSats.toString(),
+        'total_revenue_usd': totalUsd,
+        'total_transactions': totalTx,
+        'avg_payment_satoshis': totalTx > 0 ? (totalSats ~/ totalTx).toString() : '0',
+        'avg_payment_usd': totalTx > 0 ? totalUsd / totalTx : 0,
+      },
+      'top_payment_links': [],
+      'payment_methods': {'payment_link': 10, 'invoice': 3, 'direct': 2},
+      'customers': {'unique_count': 8, 'repeat_count': 3},
     };
   }
 }

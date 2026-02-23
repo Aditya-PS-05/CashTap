@@ -36,6 +36,17 @@ class PaymentProvider extends ChangeNotifier {
   List<double> _weekRevenue = [];
   List<String> _weekLabels = [];
 
+  // Analytics
+  double _weekRevenueUsd = 0;
+  double _weekRevenueBch = 0;
+  int _weekTxCount = 0;
+  double _monthRevenueUsd = 0;
+  double _monthRevenueBch = 0;
+  int _monthTxCount = 0;
+  double _allTimeRevenueUsd = 0;
+  double _allTimeRevenueBch = 0;
+  int _allTimeTxCount = 0;
+
   // Pagination
   int _currentPage = 0;
   bool _hasMoreTransactions = true;
@@ -59,6 +70,16 @@ class PaymentProvider extends ChangeNotifier {
   int get pendingCount => _pendingCount;
   List<double> get weekRevenue => _weekRevenue;
   List<String> get weekLabels => _weekLabels;
+
+  double get weekRevenueUsd => _weekRevenueUsd;
+  double get weekRevenueBch => _weekRevenueBch;
+  int get weekTxCount => _weekTxCount;
+  double get monthRevenueUsd => _monthRevenueUsd;
+  double get monthRevenueBch => _monthRevenueBch;
+  int get monthTxCount => _monthTxCount;
+  double get allTimeRevenueUsd => _allTimeRevenueUsd;
+  double get allTimeRevenueBch => _allTimeRevenueBch;
+  int get allTimeTxCount => _allTimeTxCount;
 
   /// Fetch all transactions (first page).
   Future<void> fetchTransactions() async {
@@ -245,6 +266,35 @@ class PaymentProvider extends ChangeNotifier {
     });
   }
 
+  /// Fetch analytics data for a given range.
+  Future<void> fetchAnalytics({String range = '7d'}) async {
+    try {
+      final data = await _apiService.getAnalytics(range: range);
+      final summary = data['summary'] as Map<String, dynamic>? ?? {};
+      final totalSats = int.tryParse(summary['total_revenue_satoshis']?.toString() ?? '0') ?? 0;
+      final totalUsd = (summary['total_revenue_usd'] as num?)?.toDouble() ?? 0;
+      final totalTx = summary['total_transactions'] as int? ?? 0;
+
+      if (range == '7d') {
+        _weekRevenueBch = totalSats / 100000000.0;
+        _weekRevenueUsd = totalUsd;
+        _weekTxCount = totalTx;
+      } else if (range == '30d') {
+        _monthRevenueBch = totalSats / 100000000.0;
+        _monthRevenueUsd = totalUsd;
+        _monthTxCount = totalTx;
+      } else if (range == '90d') {
+        _allTimeRevenueBch = totalSats / 100000000.0;
+        _allTimeRevenueUsd = totalUsd;
+        _allTimeTxCount = totalTx;
+      }
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Failed to fetch analytics ($range): $e');
+    }
+  }
+
   /// Fetch dashboard stats.
   Future<void> fetchDashboardStats() async {
     try {
@@ -290,10 +340,21 @@ class PaymentProvider extends ChangeNotifier {
   }
 
   /// Export transactions to CSV string.
-  String exportTransactionsCsv() {
+  /// Optionally filter by [from] and [to] date range.
+  String exportTransactionsCsv({DateTime? from, DateTime? to}) {
     final buffer = StringBuffer();
     buffer.writeln('Date,Amount (BCH),Amount (USD),From,To,Tx Hash,Memo,Status');
-    for (final tx in _transactions) {
+
+    var txList = _transactions;
+    if (from != null || to != null) {
+      txList = txList.where((tx) {
+        if (from != null && tx.createdAt.isBefore(from)) return false;
+        if (to != null && tx.createdAt.isAfter(to)) return false;
+        return true;
+      }).toList();
+    }
+
+    for (final tx in txList) {
       buffer.writeln(
         '${tx.createdAt.toIso8601String()},'
         '${tx.amountBch},'

@@ -449,6 +449,20 @@ class TransactionMonitor {
         payment_link_id: paymentLinkId,
         status,
       });
+
+      // Emit SSE event to connected clients
+      try {
+        const { emitEvent } = await import("../routes/events.js");
+        emitEvent(merchantId, "payment.received", {
+          transaction_id: tx.id,
+          tx_hash: txHash,
+          amount_satoshis: amount.toString(),
+          confirmations,
+          status,
+        });
+      } catch {
+        // SSE service may not be initialized yet
+      }
     } catch (err) {
       console.error(`[Monitor] processPayment failed for ${txHash}:`, err);
     }

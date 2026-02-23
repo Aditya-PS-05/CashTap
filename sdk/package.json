@@ -4,9 +4,24 @@
   "private": true,
   "description": "BCH Pay embeddable checkout SDK",
   "main": "dist/bchpay.js",
+  "exports": {
+    ".": "./dist/bchpay.js",
+    "./react": {
+      "import": "./dist/react.mjs",
+      "types": "./dist/react.d.ts"
+    }
+  },
   "scripts": {
     "build": "node build.mjs",
     "dev": "node build.mjs --watch"
+  },
+  "peerDependencies": {
+    "react": ">=17",
+    "react-dom": ">=17"
+  },
+  "peerDependenciesMeta": {
+    "react": { "optional": true },
+    "react-dom": { "optional": true }
   },
   "devDependencies": {
     "esbuild": "^0.20.0",

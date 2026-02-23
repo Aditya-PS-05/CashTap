@@ -22,15 +22,30 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   bool _isFirstLoad = true;
   bool _hasLoadError = false;
   String _loadErrorMessage = 'Failed to load dashboard data';
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(_onTabChanged);
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _tabController.removeListener(_onTabChanged);
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  void _onTabChanged() {
+    if (!_tabController.indexIsChanging) return;
+    // Tab changed, analytics data is already loaded
   }
 
   Future<void> _loadData() async {
@@ -42,6 +57,9 @@ class _HomeScreenState extends State<HomeScreen> {
         paymentProvider.fetchDashboardStats(),
         paymentProvider.fetchTransactions(),
         walletProvider.refreshAll(),
+        paymentProvider.fetchAnalytics(range: '7d'),
+        paymentProvider.fetchAnalytics(range: '30d'),
+        paymentProvider.fetchAnalytics(range: '90d'),
       ]);
 
       if (mounted) {
@@ -203,32 +221,119 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Stats cards
-        Row(
-          children: [
-            Expanded(
-              child: StatCard(
-                title: "Today's Revenue",
-                value: BchService.formatUsdAmount(payments.todayRevenueUsd),
-                subtitle:
-                    BchService.formatBchWithUnit(payments.todayRevenueBch),
-                icon: Icons.trending_up,
-                iconColor: AppTheme.bchGreen,
+        // Time period tabs with stats
+        Container(
+          decoration: BoxDecoration(
+            color: theme.cardTheme.color,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            children: [
+              TabBar(
+                controller: _tabController,
+                labelColor: AppTheme.bchGreen,
+                unselectedLabelColor: theme.textTheme.bodySmall?.color,
+                indicatorColor: AppTheme.bchGreen,
+                indicatorSize: TabBarIndicatorSize.label,
+                labelStyle: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+                tabs: const [
+                  Tab(text: 'Today'),
+                  Tab(text: 'This Week'),
+                  Tab(text: 'This Month'),
+                ],
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: StatCard(
-                title: 'Transactions',
-                value: payments.todayTxCount.toString(),
-                subtitle: 'Today',
-                icon: Icons.receipt_long,
-                iconColor: AppTheme.pendingBlue,
+              SizedBox(
+                height: 120,
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    // Today
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _buildMiniStat(
+                              theme,
+                              'Revenue',
+                              BchService.formatUsdAmount(payments.todayRevenueUsd),
+                              BchService.formatBchWithUnit(payments.todayRevenueBch),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _buildMiniStat(
+                              theme,
+                              'Transactions',
+                              payments.todayTxCount.toString(),
+                              '${payments.pendingCount} pending',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // This Week
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _buildMiniStat(
+                              theme,
+                              'Revenue',
+                              BchService.formatUsdAmount(payments.weekRevenueUsd),
+                              BchService.formatBchWithUnit(payments.weekRevenueBch),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _buildMiniStat(
+                              theme,
+                              'Transactions',
+                              payments.weekTxCount.toString(),
+                              'This week',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // This Month
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _buildMiniStat(
+                              theme,
+                              'Revenue',
+                              BchService.formatUsdAmount(payments.monthRevenueUsd),
+                              BchService.formatBchWithUnit(payments.monthRevenueBch),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _buildMiniStat(
+                              theme,
+                              'Transactions',
+                              payments.monthTxCount.toString(),
+                              'This month',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
+
+        // Additional stat cards row
         Row(
           children: [
             Expanded(
@@ -322,6 +427,39 @@ class _HomeScreenState extends State<HomeScreen> {
               onTap: () => context.push('/transaction/${tx.id}'),
             ),
           ),
+      ],
+    );
+  }
+
+  Widget _buildMiniStat(ThemeData theme, String label, String value, String subtitle) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            color: theme.textTheme.bodySmall?.color,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: GoogleFonts.inter(
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            color: theme.textTheme.displayLarge?.color,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          subtitle,
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            color: theme.textTheme.bodySmall?.color,
+          ),
+        ),
       ],
     );
   }

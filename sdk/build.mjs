@@ -7,7 +7,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const watch = process.argv.includes("--watch");
 
 async function run() {
-  const ctx = await build({
+  // IIFE build for browser embedding (vanilla JS)
+  await build({
     entryPoints: ["src/index.ts"],
     bundle: true,
     format: "iife",
@@ -17,7 +18,20 @@ async function run() {
     sourcemap: false,
     target: "es2020",
     platform: "browser",
-    ...(watch ? {} : {}),
+  });
+
+  // ESM React build
+  await build({
+    entryPoints: ["src/react.tsx"],
+    bundle: true,
+    format: "esm",
+    outfile: "dist/react.mjs",
+    external: ["react", "react-dom"],
+    jsx: "automatic",
+    minify: !watch,
+    sourcemap: false,
+    target: "es2020",
+    platform: "browser",
   });
 
   // Copy to web/public for serving
@@ -30,7 +44,7 @@ async function run() {
     console.log("Copied sdk.js to web/public/");
   }
 
-  console.log("SDK build complete");
+  console.log("SDK build complete (IIFE + React ESM)");
 }
 
 run().catch(console.error);

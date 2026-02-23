@@ -13,7 +13,8 @@ import contractRoutes from "./routes/contracts.js";
 import cashtokenRoutes from "./routes/cashtokens.js";
 import priceRoutes from "./routes/price.js";
 import checkoutRoutes from "./routes/checkout.js";
-import { rateLimiter } from "./middleware/rate-limit.js";
+import eventRoutes from "./routes/events.js";
+import { rateLimiter, authRateLimiter } from "./middleware/rate-limit.js";
 
 const app = new Hono();
 
@@ -34,6 +35,14 @@ app.use(
 
 app.use("*", logger());
 
+// Security headers
+app.use("*", async (c, next) => {
+  await next();
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("X-Frame-Options", "SAMEORIGIN");
+  c.header("X-XSS-Protection", "1; mode=block");
+});
+
 // ---------------------------------------------------------------------------
 // Global error handler
 // ---------------------------------------------------------------------------
@@ -43,21 +52,26 @@ app.onError((err, c) => {
 
   // Zod validation errors forwarded from middleware
   if (err.message.includes("Validation")) {
-    return c.json({ error: err.message }, 400);
+    return c.json({ error: err.message, code: "VALIDATION_ERROR" }, 400);
   }
 
   // Prisma known errors
   if (err.message.includes("Unique constraint")) {
-    return c.json({ error: "Resource already exists" }, 409);
+    return c.json({ error: "Resource already exists", code: "ALREADY_EXISTS" }, 409);
   }
 
   if (err.message.includes("Record to update not found")) {
-    return c.json({ error: "Resource not found" }, 404);
+    return c.json({ error: "Resource not found", code: "NOT_FOUND" }, 404);
+  }
+
+  if (err.message.includes("Unauthorized") || err.message.includes("unauthorized")) {
+    return c.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, 401);
   }
 
   return c.json(
     {
       error: "Internal server error",
+      code: "INTERNAL_ERROR",
       ...(process.env.NODE_ENV === "development" && {
         message: err.message,
       }),
@@ -74,6 +88,7 @@ app.notFound((c) => {
   return c.json(
     {
       error: "Not found",
+      code: "NOT_FOUND",
       path: c.req.path,
       method: c.req.method,
     },
@@ -108,12 +123,16 @@ app.route("/api/contracts", contractRoutes);
 app.route("/api/cashtokens", cashtokenRoutes);
 app.route("/api/price", priceRoutes);
 app.route("/api/checkout", checkoutRoutes);
+app.route("/api/events", eventRoutes);
 
 // ---------------------------------------------------------------------------
 // Route groups — versioned /api/v1/ prefix (with rate limiting)
 // ---------------------------------------------------------------------------
 
 app.use("/api/v1/*", rateLimiter);
+
+// Stricter rate limit on auth endpoints
+app.use("/api/v1/auth/*", authRateLimiter);
 
 app.route("/api/v1/auth", authRoutes);
 app.route("/api/v1/merchants", merchantRoutes);
@@ -125,6 +144,7 @@ app.route("/api/v1/contracts", contractRoutes);
 app.route("/api/v1/cashtokens", cashtokenRoutes);
 app.route("/api/v1/price", priceRoutes);
 app.route("/api/v1/checkout", checkoutRoutes);
+app.route("/api/v1/events", eventRoutes);
 
 // ---------------------------------------------------------------------------
 // Start server
