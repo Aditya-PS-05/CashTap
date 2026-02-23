@@ -40,18 +40,25 @@ class _OnboardScreenState extends State<OnboardScreen> {
               children: [
                 const SizedBox(height: 48),
 
-                // Header
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: AppTheme.bchGreen.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(
-                    Icons.storefront,
-                    size: 32,
-                    color: AppTheme.bchGreen,
+                // Header with 3D coin
+                Center(
+                  child: Image.asset(
+                    'assets/images/bch_coin_icon.png',
+                    width: 120,
+                    height: 120,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: AppTheme.bchGreen.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Icon(
+                        Icons.storefront,
+                        size: 32,
+                        color: AppTheme.bchGreen,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),

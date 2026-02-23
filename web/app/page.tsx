@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Zap, Smartphone, Link2, FileText, Coins, Shield, ArrowRight, Github } from "lucide-react";
 
 export default function LandingPage() {
@@ -28,32 +29,47 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero */}
-      <section className="mx-auto max-w-6xl px-6 py-24 text-center">
-        <div className="inline-flex items-center gap-2 rounded-full border bg-muted/50 px-4 py-1.5 text-sm mb-6">
-          <Coins className="h-4 w-4 text-[#0AC18E]" />
-          <span>Built with CashTokens on Bitcoin Cash</span>
-        </div>
-        <h1 className="text-5xl font-bold tracking-tight sm:text-6xl lg:text-7xl">
-          Accept <span className="text-[#0AC18E]">Bitcoin Cash</span>
-          <br />in Seconds
-        </h1>
-        <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
-          Mobile POS, Payment Links, Invoices, and CashToken Loyalty Rewards — all in one app.
-          Zero-confirmation instant payments. No middlemen.
-        </p>
-        <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-          <Link
-            href="/dashboard"
-            className="inline-flex h-12 items-center gap-2 rounded-lg bg-[#0AC18E] px-8 text-base font-semibold text-white hover:bg-[#09a87b] transition-colors"
-          >
-            Get Started <ArrowRight className="h-4 w-4" />
-          </Link>
-          <a
-            href="https://github.com"
-            className="inline-flex h-12 items-center gap-2 rounded-lg border px-8 text-base font-medium hover:bg-muted transition-colors"
-          >
-            <Github className="h-4 w-4" /> View on GitHub
-          </a>
+      <section className="mx-auto max-w-6xl px-6 py-24">
+        <div className="grid lg:grid-cols-2 gap-12 items-center">
+          <div className="text-center lg:text-left">
+            <div className="inline-flex items-center gap-2 rounded-full border bg-muted/50 px-4 py-1.5 text-sm mb-6">
+              <Coins className="h-4 w-4 text-[#0AC18E]" />
+              <span>Built with CashTokens on Bitcoin Cash</span>
+            </div>
+            <h1 className="text-5xl font-bold tracking-tight sm:text-6xl lg:text-7xl">
+              Accept <span className="text-[#0AC18E]">Bitcoin Cash</span>
+              <br />in Seconds
+            </h1>
+            <p className="mt-6 max-w-2xl text-lg text-muted-foreground">
+              Mobile POS, Payment Links, Invoices, and CashToken Loyalty Rewards — all in one app.
+              Zero-confirmation instant payments. No middlemen.
+            </p>
+            <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center lg:justify-start">
+              <Link
+                href="/dashboard"
+                className="inline-flex h-12 items-center gap-2 rounded-lg bg-[#0AC18E] px-8 text-base font-semibold text-white hover:bg-[#09a87b] transition-colors"
+              >
+                Get Started <ArrowRight className="h-4 w-4" />
+              </Link>
+              <a
+                href="https://github.com"
+                className="inline-flex h-12 items-center gap-2 rounded-lg border px-8 text-base font-medium hover:bg-muted transition-colors"
+              >
+                <Github className="h-4 w-4" /> View on GitHub
+              </a>
+            </div>
+          </div>
+          <div className="relative flex justify-center lg:justify-end">
+            <div className="relative w-80 h-80 lg:w-96 lg:h-96">
+              <Image
+                src="/images/bch_coin.png"
+                alt="Bitcoin Cash 3D Coin"
+                fill
+                className="object-contain drop-shadow-2xl animate-float"
+                priority
+              />
+            </div>
+          </div>
         </div>
       </section>
 
@@ -68,28 +84,37 @@ export default function LandingPage() {
             {[
               {
                 icon: Smartphone,
+                image: "/images/payment_terminal.png",
                 title: "Mobile POS",
                 desc: "Charge customers with your phone. Type the amount, show the QR, get paid instantly.",
               },
               {
                 icon: Link2,
+                image: "/images/pay_button.png",
                 title: "Payment Links",
                 desc: "Share a link, get paid in BCH. Single-use or reusable. Works with any BCH wallet.",
               },
               {
                 icon: Coins,
+                image: "/images/wallet.png",
                 title: "CashToken Loyalty",
                 desc: "Reward customers with on-chain loyalty tokens. Fungible CashTokens for real utility.",
               },
               {
                 icon: Shield,
+                image: "/images/security_shield.png",
                 title: "Receipt NFTs",
                 desc: "On-chain proof of every purchase. Non-fungible CashToken receipts with purchase data.",
               },
             ].map((f) => (
-              <div key={f.title} className="rounded-xl border bg-card p-6 space-y-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0AC18E]/10">
-                  <f.icon className="h-5 w-5 text-[#0AC18E]" />
+              <div key={f.title} className="rounded-xl border bg-card p-6 space-y-3 group hover:shadow-lg transition-shadow">
+                <div className="relative h-28 w-full mb-2">
+                  <Image
+                    src={f.image}
+                    alt={f.title}
+                    fill
+                    className="object-contain group-hover:scale-105 transition-transform duration-300"
+                  />
                 </div>
                 <h3 className="text-lg font-semibold">{f.title}</h3>
                 <p className="text-sm text-muted-foreground">{f.desc}</p>

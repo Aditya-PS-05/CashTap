@@ -478,17 +478,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       ),
       child: Column(
         children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: AppTheme.bchGreen.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Icon(
-              Icons.storefront,
-              size: 32,
-              color: AppTheme.bchGreen,
+          Image.asset(
+            'assets/images/bch_coin_icon.png',
+            width: 96,
+            height: 96,
+            errorBuilder: (context, error, stackTrace) => Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: AppTheme.bchGreen.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Icon(
+                Icons.storefront,
+                size: 32,
+                color: AppTheme.bchGreen,
+              ),
             ),
           ),
           const SizedBox(height: 20),
