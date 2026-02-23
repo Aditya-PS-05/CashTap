@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ArrowDownLeft, ExternalLink, Search, Download, FileJson, Loader2 } from "lucide-react";
+import Image from "next/image";
 import { formatBch, shortenAddress, satoshisToBch } from "@/lib/utils";
 import { TransactionDetail } from "@/components/transaction-detail";
 import { apiFetch } from "@/lib/api";
@@ -312,6 +313,9 @@ export default function TransactionsPage() {
                   }) : (
                     <tr>
                       <td colSpan={7} className="p-8 text-center text-sm text-muted-foreground">
+                        <div className="relative mx-auto w-24 h-24 mb-4">
+                          <Image src="/images/bch_coin.png" alt="No transactions" fill className="object-contain opacity-60" />
+                        </div>
                         No transactions found
                       </td>
                     </tr>

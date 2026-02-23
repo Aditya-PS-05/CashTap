@@ -768,10 +768,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       child: Center(
         child: Column(
           children: [
-            Icon(
-              Icons.receipt_long_outlined,
-              size: 48,
-              color: theme.textTheme.bodySmall?.color,
+            Image.asset(
+              'assets/images/bch_coin_icon.png',
+              width: 72,
+              height: 72,
+              errorBuilder: (context, error, stackTrace) => Icon(
+                Icons.receipt_long_outlined,
+                size: 56,
+                color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.5),
+              ),
             ),
             const SizedBox(height: 12),
             Text(

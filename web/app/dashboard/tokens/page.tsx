@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Coins, Receipt, TrendingUp, Users, Loader2, Check } from "lucide-react";
+import Image from "next/image";
 import { toast } from "sonner";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
@@ -251,6 +252,9 @@ export default function TokensPage() {
               </div>
             ) : (
               <div className="space-y-3">
+                <div className="relative mx-auto w-20 h-20 mb-2">
+                  <Image src="/images/wallet.png" alt="Loyalty Tokens" fill className="object-contain opacity-60" />
+                </div>
                 <div>
                   <label className="text-sm font-medium">Token Name</label>
                   <Input
@@ -321,6 +325,9 @@ export default function TokensPage() {
               </div>
             ) : (
               <div className="space-y-3">
+                <div className="relative mx-auto w-20 h-20 mb-2">
+                  <Image src="/images/security_shield.png" alt="Receipt NFTs" fill className="object-contain opacity-60" />
+                </div>
                 <p className="text-sm text-muted-foreground">
                   Enable receipt NFTs to automatically mint an on-chain proof-of-purchase for every payment.
                 </p>

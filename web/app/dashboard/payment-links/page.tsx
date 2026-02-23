@@ -22,6 +22,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Plus, Copy, QrCode, ExternalLink, Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import Image from "next/image";
 import { toast } from "sonner";
 import { PaymentLinkDetail } from "@/components/payment-link-detail";
 import { usePrice } from "@/lib/price-context";
@@ -435,6 +436,9 @@ export default function PaymentLinksPage() {
                   {links.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                        <div className="relative mx-auto w-32 h-16 mb-4">
+                          <Image src="/images/pay_button.png" alt="No payment links" fill className="object-contain opacity-60" />
+                        </div>
                         No payment links yet. Create your first one!
                       </td>
                     </tr>

@@ -6,7 +6,8 @@ import { QRCodeSVG } from "qrcode.react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Check, ExternalLink, Zap, Loader2 } from "lucide-react";
+import { Copy, Check, ExternalLink, Loader2 } from "lucide-react";
+import Image from "next/image";
 import { toast } from "sonner";
 import { generatePaymentURI, shortenAddress } from "@/lib/utils";
 
@@ -56,8 +57,8 @@ export default function PaymentPage() {
         <CardContent className="pt-6 text-center space-y-6">
           {/* Merchant Info */}
           <div>
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-              <Zap className="h-6 w-6 text-primary" />
+            <div className="mx-auto mb-3 relative w-14 h-14">
+              <Image src="/images/bch_coin_icon.png" alt="BCH" fill className="object-contain" />
             </div>
             <h1 className="text-lg font-semibold">{payment.merchantName}</h1>
             {payment.memo && (
@@ -126,8 +127,8 @@ export default function PaymentPage() {
 
           {status === "confirmed" && (
             <div className="space-y-4 py-4">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
-                <Check className="h-8 w-8 text-green-600" />
+              <div className="relative mx-auto w-20 h-20">
+                <Image src="/images/bch_coin.png" alt="Payment Confirmed" fill className="object-contain animate-float" />
               </div>
               <div>
                 <p className="text-lg font-semibold text-green-600">Payment Confirmed!</p>

@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Zap, Wallet, KeyRound, ArrowRight, Globe, Loader2 } from "lucide-react";
+import { Wallet, KeyRound, ArrowRight, Globe, Loader2 } from "lucide-react";
+import Image from "next/image";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { isPaytacaAvailable, connectPaytaca } from "@/lib/paytaca";
@@ -87,8 +88,8 @@ export default function AuthPage() {
       <Card className="w-full max-w-md">
         <CardContent className="pt-8 pb-8 text-center space-y-6">
           <div>
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-[#0AC18E]">
-              <Zap className="h-7 w-7 text-white" />
+            <div className="mx-auto mb-4 relative w-20 h-20">
+              <Image src="/images/bch_coin_icon.png" alt="BCH Pay" fill className="object-contain" />
             </div>
             <h1 className="text-2xl font-bold">BCH Pay</h1>
             <p className="text-sm text-muted-foreground mt-1">

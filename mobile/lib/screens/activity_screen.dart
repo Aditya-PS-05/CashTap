@@ -280,10 +280,15 @@ class _ActivityScreenState extends State<ActivityScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.receipt_long_outlined,
-            size: 64,
-            color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.5),
+          Image.asset(
+            'assets/images/bch_coin_icon.png',
+            width: 80,
+            height: 80,
+            errorBuilder: (context, error, stackTrace) => Icon(
+              Icons.receipt_long_outlined,
+              size: 64,
+              color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.5),
+            ),
           ),
           const SizedBox(height: 16),
           Text(

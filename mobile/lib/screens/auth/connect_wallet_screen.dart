@@ -132,17 +132,18 @@ class _ConnectWalletScreenState extends State<ConnectWalletScreen> {
               const Spacer(flex: 2),
 
               // Logo
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  color: AppTheme.bchGreen.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.currency_bitcoin,
-                  size: 56,
-                  color: AppTheme.bchGreen,
+              Image.asset(
+                'assets/images/bch_coin.png',
+                width: 120,
+                height: 120,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: AppTheme.bchGreen.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.currency_bitcoin, size: 56, color: AppTheme.bchGreen),
                 ),
               ),
               const SizedBox(height: 28),

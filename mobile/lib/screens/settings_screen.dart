@@ -210,7 +210,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 24),
 
             // ── Merchant Profile ──
-            _buildSectionHeader(theme, 'Merchant Profile', Icons.storefront),
+            Row(
+              children: [
+                Image.asset(
+                  'assets/images/bch_coin_icon.png',
+                  width: 24,
+                  height: 24,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const Icon(Icons.storefront, size: 20, color: AppTheme.bchGreen),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Merchant Profile',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: AppTheme.bchGreen,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
             _buildCard(
               theme,
@@ -232,8 +249,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 24),
 
             // ── Wallet ──
-            _buildSectionHeader(
-                theme, 'Wallet', Icons.account_balance_wallet_outlined),
+            Row(
+              children: [
+                Image.asset(
+                  'assets/images/wallet.png',
+                  width: 24,
+                  height: 24,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const Icon(Icons.account_balance_wallet_outlined, size: 20, color: AppTheme.bchGreen),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Wallet',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: AppTheme.bchGreen,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
             _buildCard(
               theme,

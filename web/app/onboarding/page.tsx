@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Zap, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import Image from "next/image";
 import { toast } from "sonner";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
@@ -49,8 +50,8 @@ export default function OnboardingPage() {
       <Card className="w-full max-w-md">
         <CardContent className="pt-8 pb-8 space-y-6">
           <div className="text-center">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-[#0AC18E]">
-              <Zap className="h-7 w-7 text-white" />
+            <div className="mx-auto mb-4 relative w-20 h-20">
+              <Image src="/images/bch_coin_icon.png" alt="BCH Pay" fill className="object-contain" />
             </div>
             <h1 className="text-2xl font-bold">Set Up Your Business</h1>
             <p className="text-sm text-muted-foreground mt-1">
