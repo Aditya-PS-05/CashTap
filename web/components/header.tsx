@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { shortenAddress } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { usePrice } from "@/lib/price-context";
 import { useRouter } from "next/navigation";
 
 export function Header() {
   const { address, merchant, logout } = useAuth();
+  const { bchUsd, loading: priceLoading } = usePrice();
   const router = useRouter();
-  const bchPrice = 342.50;
+  const bchPrice = priceLoading ? 0 : bchUsd;
 
   const handleLogout = async () => {
     await logout();
@@ -24,7 +26,7 @@ export function Header() {
           <span className="text-sm font-medium">{merchant.name}</span>
         )}
         <Badge variant="outline" className="font-mono text-xs">
-          1 BCH = ${bchPrice.toFixed(2)}
+          {priceLoading ? "Loading..." : `1 BCH = $${bchPrice.toFixed(2)}`}
         </Badge>
       </div>
 

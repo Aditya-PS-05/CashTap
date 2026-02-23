@@ -127,7 +127,7 @@ class PaymentProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final paymentLink = await _apiService.createPaymentLink(
+      final paymentLink = await _apiService.createPaymentLinkLegacy(
         amountBch: amountBch,
         amountUsd: amountUsd,
         memo: memo,

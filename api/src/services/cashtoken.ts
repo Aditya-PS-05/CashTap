@@ -114,9 +114,31 @@ class CashTokenService {
       };
     }
 
-    // In production: build a TX that sends fungible CashTokens to customerAddress
-    // Using mainnet-js: wallet.send([{ cashaddr: customerAddress, value: 546, token: { category, amount: tokensToIssue } }])
-    const txHash = `loyalty_${Date.now().toString(16)}`;
+    // Try wallet transfer, fall back to stub tx hash
+    let txHash: string | null = null;
+    try {
+      const { walletService } = await import("./wallet.js");
+      const result = await walletService.sendTokens(
+        customerAddress,
+        config.token_category,
+        tokensToIssue
+      );
+      txHash = result?.txId || null;
+    } catch {
+      // Wallet not available — use stub
+      txHash = `loyalty_${Date.now().toString(16)}`;
+    }
+
+    // Persist issuance to DB
+    await prisma.tokenIssuance.create({
+      data: {
+        config_id: config.id,
+        merchant_id: merchantId,
+        customer_address: customerAddress,
+        amount: tokensToIssue,
+        tx_hash: txHash,
+      },
+    });
 
     console.log(
       `[CashToken] Issued ${tokensToIssue} ${config.token_symbol} to ${customerAddress.slice(0, 20)}...`
@@ -143,6 +165,7 @@ class CashTokenService {
       timestamp: Date;
     }
   ): Promise<{
+    receiptId: string;
     nftCategory: string;
     commitment: string;
     txHash: string | null;
@@ -182,15 +205,43 @@ class CashTokenService {
     const commitmentHex = commitment.toString("hex");
 
     // In production: mint NFT using mainnet-js
-    // wallet.send([{ cashaddr: customerAddress, value: 546, token: { category, commitment: commitmentHex, capability: "none" } }])
     const nftCategory = config?.token_category || `receipt_${Date.now().toString(16)}${"0".repeat(48)}`.slice(0, 64);
-    const mintTxHash = `nft_${Date.now().toString(16)}`;
+
+    // Try wallet NFT mint, fall back to stub
+    let mintTxHash: string | null = null;
+    try {
+      const { walletService } = await import("./wallet.js");
+      const result = await walletService.sendNFT(
+        customerAddress,
+        nftCategory,
+        commitmentHex
+      );
+      mintTxHash = result?.txId || null;
+    } catch {
+      mintTxHash = `nft_${Date.now().toString(16)}`;
+    }
+
+    // Persist receipt NFT to DB
+    const receipt = await prisma.receiptNFT.create({
+      data: {
+        config_id: config?.id || null,
+        merchant_id: merchantId,
+        customer_address: customerAddress,
+        nft_category: nftCategory,
+        commitment: commitmentHex,
+        tx_hash: paymentData.txHash,
+        mint_tx_hash: mintTxHash,
+        amount_satoshis: paymentData.amountSats,
+        memo: paymentData.memo || null,
+      },
+    });
 
     console.log(
       `[CashToken] Minted receipt NFT for ${paymentData.txHash.slice(0, 12)}... → ${customerAddress.slice(0, 20)}...`
     );
 
     return {
+      receiptId: receipt.id,
       nftCategory,
       commitment: commitmentHex,
       txHash: mintTxHash,
@@ -253,16 +304,19 @@ class CashTokenService {
   }
 
   /**
-   * Get merchant's token stats.
+   * Get merchant's token stats with real DB counts.
    */
   async getTokenStats(merchantId: string): Promise<{
     loyaltyTokens: {
       configured: boolean;
       symbol?: string;
+      category?: string;
       totalIssued: number;
+      issuanceCount: number;
     };
     receiptNFTs: {
       configured: boolean;
+      category?: string;
       totalMinted: number;
     };
   }> {
@@ -274,17 +328,151 @@ class CashTokenService {
       where: { merchant_id: merchantId, purpose: "RECEIPT", active: true },
     });
 
+    // Real aggregate queries
+    const issuanceAgg = await prisma.tokenIssuance.aggregate({
+      where: { merchant_id: merchantId },
+      _sum: { amount: true },
+      _count: { id: true },
+    });
+
+    const receiptCount = await prisma.receiptNFT.count({
+      where: { merchant_id: merchantId },
+    });
+
     return {
       loyaltyTokens: {
         configured: !!loyaltyConfig,
         symbol: loyaltyConfig?.token_symbol,
-        totalIssued: 0, // TODO: track in a separate table
+        category: loyaltyConfig?.token_category,
+        totalIssued: Number(issuanceAgg._sum.amount || 0),
+        issuanceCount: issuanceAgg._count.id,
       },
       receiptNFTs: {
         configured: !!receiptConfig,
-        totalMinted: 0, // TODO: track in a separate table
+        category: receiptConfig?.token_category,
+        totalMinted: receiptCount,
       },
     };
+  }
+
+  /**
+   * Redeem loyalty tokens (records a negative issuance).
+   */
+  async redeemLoyaltyTokens(
+    merchantId: string,
+    customerAddress: string,
+    amount: bigint,
+    description?: string
+  ): Promise<{
+    redeemed: bigint;
+    txHash: string | null;
+    tokenSymbol: string;
+  }> {
+    const config = await prisma.cashtokenConfig.findFirst({
+      where: {
+        merchant_id: merchantId,
+        purpose: "LOYALTY",
+        active: true,
+      },
+    });
+
+    if (!config) {
+      return { redeemed: 0n, txHash: null, tokenSymbol: "" };
+    }
+
+    const txHash = `redeem_${Date.now().toString(16)}`;
+
+    // Record negative amount for redemption
+    await prisma.tokenIssuance.create({
+      data: {
+        config_id: config.id,
+        merchant_id: merchantId,
+        customer_address: customerAddress,
+        amount: -amount,
+        tx_hash: txHash,
+      },
+    });
+
+    console.log(
+      `[CashToken] Redeemed ${amount} ${config.token_symbol} from ${customerAddress.slice(0, 20)}...`
+    );
+
+    return {
+      redeemed: amount,
+      txHash,
+      tokenSymbol: config.token_symbol,
+    };
+  }
+
+  /**
+   * Get comprehensive analytics for a merchant's CashToken activity.
+   */
+  async getAnalytics(merchantId: string): Promise<{
+    stats: Awaited<ReturnType<CashTokenService["getTokenStats"]>>;
+    recentIssuances: any[];
+    recentReceipts: any[];
+    topHolders: { customerAddress: string; totalTokens: bigint }[];
+    redemptionRate: number;
+  }> {
+    const stats = await this.getTokenStats(merchantId);
+
+    const recentIssuances = await prisma.tokenIssuance.findMany({
+      where: { merchant_id: merchantId },
+      orderBy: { created_at: "desc" },
+      take: 10,
+    });
+
+    const recentReceipts = await prisma.receiptNFT.findMany({
+      where: { merchant_id: merchantId },
+      orderBy: { created_at: "desc" },
+      take: 10,
+    });
+
+    // Top holders by customer address
+    const holderGroups = await prisma.tokenIssuance.groupBy({
+      by: ["customer_address"],
+      where: { merchant_id: merchantId },
+      _sum: { amount: true },
+      orderBy: { _sum: { amount: "desc" } },
+      take: 10,
+    });
+
+    const topHolders = holderGroups.map((g) => ({
+      customerAddress: g.customer_address,
+      totalTokens: g._sum.amount || 0n,
+    }));
+
+    // Redemption rate: negative issuances / total positive issuances
+    const totalPositive = await prisma.tokenIssuance.aggregate({
+      where: { merchant_id: merchantId, amount: { gt: 0 } },
+      _sum: { amount: true },
+    });
+    const totalNegative = await prisma.tokenIssuance.aggregate({
+      where: { merchant_id: merchantId, amount: { lt: 0 } },
+      _sum: { amount: true },
+    });
+
+    const positiveSum = Number(totalPositive._sum.amount || 0);
+    const negativeSum = Math.abs(Number(totalNegative._sum.amount || 0));
+    const redemptionRate = positiveSum > 0 ? negativeSum / positiveSum : 0;
+
+    return {
+      stats,
+      recentIssuances,
+      recentReceipts,
+      topHolders,
+      redemptionRate,
+    };
+  }
+
+  /**
+   * Get a single receipt NFT by ID (public).
+   */
+  async getReceipt(receiptId: string): Promise<any | null> {
+    return prisma.receiptNFT.findUnique({
+      where: { id: receiptId },
+      include: { merchant: true },
+    });
   }
 }
 

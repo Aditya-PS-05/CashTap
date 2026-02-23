@@ -10,6 +10,8 @@ import {
   FileText,
   Settings,
   BarChart3,
+  Coins,
+  FileCode2,
   Zap,
 } from "lucide-react";
 
@@ -19,6 +21,8 @@ const navItems = [
   { href: "/dashboard/transactions", label: "Transactions", icon: ArrowLeftRight, tour: "transactions" },
   { href: "/dashboard/invoices", label: "Invoices", icon: FileText, tour: "invoices" },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3, tour: "analytics" },
+  { href: "/dashboard/tokens", label: "CashTokens", icon: Coins, tour: "tokens" },
+  { href: "/dashboard/contracts", label: "Contracts", icon: FileCode2, tour: "contracts" },
   { href: "/dashboard/settings", label: "Settings", icon: Settings, tour: "settings" },
 ];
 

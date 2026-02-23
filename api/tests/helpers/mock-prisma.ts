@@ -27,6 +27,8 @@ export const prismaMock = {
   device: modelMock(),
   cashtokenConfig: modelMock(),
   contractInstance: modelMock(),
+  tokenIssuance: { ...modelMock(), groupBy: vi.fn() },
+  receiptNFT: modelMock(),
 };
 
 export type PrismaMock = typeof prismaMock;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,37 +21,39 @@ import {
   DialogTrigger,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Plus, Copy, QrCode, ExternalLink } from "lucide-react";
+import { Plus, Copy, QrCode, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { PaymentLinkDetail } from "@/components/payment-link-detail";
+import { usePrice } from "@/lib/price-context";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
 
 interface PaymentLink {
   id: string;
   slug: string;
-  memo: string;
-  amountBch: string;
-  amountUsd: string;
-  type: "SINGLE" | "MULTI";
+  memo: string | null;
+  amount_satoshis: string;
+  currency: string;
+  type: "SINGLE" | "MULTI" | "RECURRING";
   status: "ACTIVE" | "INACTIVE" | "EXPIRED";
-  created: string;
-  totalCollected: string;
-  payCount: number;
-  expiresAt?: string;
-  loyaltyTokens?: boolean;
-  receiptNft?: boolean;
+  recurring_interval?: string | null;
+  recurring_count?: number;
+  last_paid_at?: string | null;
+  payment_address?: string | null;
+  created_at: string;
+  expires_at?: string | null;
 }
-
-const mockLinks: PaymentLink[] = [
-  { id: "1", slug: "cof-latte-5", memo: "Coffee Latte", amountBch: "0.0146", amountUsd: "$5.00", type: "MULTI", status: "ACTIVE", created: "Feb 20", totalCollected: "0.146 BCH", payCount: 10, loyaltyTokens: true },
-  { id: "2", slug: "web-design", memo: "Web Design Service", amountBch: "0.5845", amountUsd: "$200.00", type: "SINGLE", status: "ACTIVE", created: "Feb 19", totalCollected: "0 BCH", payCount: 0, receiptNft: true },
-  { id: "3", slug: "donation", memo: "Tip Jar / Donation", amountBch: "", amountUsd: "Any amount", type: "MULTI", status: "ACTIVE", created: "Feb 18", totalCollected: "0.87 BCH", payCount: 15 },
-  { id: "4", slug: "old-promo", memo: "Flash Sale Promo", amountBch: "0.0292", amountUsd: "$10.00", type: "SINGLE", status: "EXPIRED", created: "Feb 15", totalCollected: "0.0292 BCH", payCount: 1, expiresAt: "Feb 16" },
-];
 
 const statusColors = {
   ACTIVE: "success" as const,
   INACTIVE: "secondary" as const,
   EXPIRED: "warning" as const,
+};
+
+const typeLabels: Record<string, string> = {
+  SINGLE: "Single",
+  MULTI: "Multi",
+  RECURRING: "Recurring",
 };
 
 export default function PaymentLinksPage() {
@@ -62,10 +64,48 @@ export default function PaymentLinksPage() {
   const [customExpiry, setCustomExpiry] = useState("");
   const [loyaltyTokens, setLoyaltyTokens] = useState(false);
   const [receiptNft, setReceiptNft] = useState(false);
+  const [linkType, setLinkType] = useState<"SINGLE" | "MULTI" | "RECURRING">("MULTI");
+  const [recurringInterval, setRecurringInterval] = useState("monthly");
+  const [links, setLinks] = useState<PaymentLink[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const { formatBch, formatUsd } = usePrice();
+
+  const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    try {
+      const res = await fetch("/api/auth/session");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.accessToken) {
+          return { Authorization: `Bearer ${data.accessToken}` };
+        }
+      }
+    } catch {}
+    return {};
+  }, []);
+
+  const fetchLinks = useCallback(async () => {
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${API_BASE}/api/payment-links`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setLinks(data.payment_links || []);
+      }
+    } catch {
+      // Silently fail
+    } finally {
+      setLoading(false);
+    }
+  }, [getAuthHeaders]);
+
+  useEffect(() => {
+    fetchLinks();
+  }, [fetchLinks]);
 
   const copyLink = (slug: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(`https://bchpay.app/pay/${slug}`);
+    navigator.clipboard.writeText(`${window.location.origin}/pay/${slug}`);
     toast.success("Payment link copied!");
   };
 
@@ -73,6 +113,95 @@ export default function PaymentLinksPage() {
     setSelectedLink(link);
     setDetailOpen(true);
   };
+
+  const computeExpiresAt = (): string | undefined => {
+    if (expiration === "none") return undefined;
+    if (expiration === "custom" && customExpiry) {
+      return new Date(customExpiry).toISOString();
+    }
+    const now = Date.now();
+    const offsets: Record<string, number> = {
+      "1h": 3600_000,
+      "24h": 86400_000,
+      "7d": 604800_000,
+      "30d": 2592000_000,
+    };
+    const offset = offsets[expiration];
+    return offset ? new Date(now + offset).toISOString() : undefined;
+  };
+
+  const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setCreating(true);
+
+    const form = e.currentTarget;
+    const amountStr = (form.elements.namedItem("amount") as HTMLInputElement)?.value;
+    const memo = (form.elements.namedItem("memo") as HTMLTextAreaElement)?.value;
+
+    if (!amountStr || parseFloat(amountStr) <= 0) {
+      toast.error("Please enter a valid amount");
+      setCreating(false);
+      return;
+    }
+
+    // Convert USD to satoshis (rough estimate — price context gives us the rate)
+    const amountSatoshis = Math.round(parseFloat(amountStr) * 100_000); // placeholder conversion
+
+    try {
+      const headers = await getAuthHeaders();
+      const body: Record<string, unknown> = {
+        amount_satoshis: amountSatoshis,
+        memo: memo || undefined,
+        type: linkType,
+        expires_at: computeExpiresAt(),
+      };
+
+      if (linkType === "RECURRING") {
+        body.recurring_interval = recurringInterval;
+      }
+
+      const res = await fetch(`${API_BASE}/api/payment-links`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (res.ok) {
+        toast.success("Payment link created!");
+        setOpen(false);
+        setExpiration("none");
+        setCustomExpiry("");
+        setLoyaltyTokens(false);
+        setReceiptNft(false);
+        setLinkType("MULTI");
+        fetchLinks();
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Failed to create payment link");
+      }
+    } catch {
+      toast.error("Failed to create payment link");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  // Adapt PaymentLink for the detail component
+  const adaptForDetail = (link: PaymentLink) => ({
+    id: link.id,
+    slug: link.slug,
+    memo: link.memo || "",
+    amountBch: link.amount_satoshis ? formatBch(link.amount_satoshis) : "",
+    amountUsd: link.amount_satoshis ? formatUsd(link.amount_satoshis) : "Any amount",
+    type: link.type as "SINGLE" | "MULTI",
+    status: link.status,
+    created: new Date(link.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    totalCollected: "0 BCH",
+    payCount: link.recurring_count || 0,
+    expiresAt: link.expires_at || undefined,
+    loyaltyTokens: false,
+    receiptNft: false,
+  });
 
   return (
     <div className="space-y-6">
@@ -92,37 +221,67 @@ export default function PaymentLinksPage() {
               <DialogTitle>Create Payment Link</DialogTitle>
               <DialogDescription>Generate a shareable link to receive BCH payments.</DialogDescription>
             </DialogHeader>
-            <form
-              className="space-y-4"
-              onSubmit={(e) => {
-                e.preventDefault();
-                toast.success("Payment link created!");
-                setOpen(false);
-                setExpiration("none");
-                setCustomExpiry("");
-                setLoyaltyTokens(false);
-                setReceiptNft(false);
-              }}
-            >
+            <form className="space-y-4" onSubmit={handleCreate}>
               <div>
-                <label className="text-sm font-medium">Amount (USD)</label>
-                <Input type="number" step="0.01" placeholder="5.00" className="mt-1" />
-                <p className="text-xs text-muted-foreground mt-1">Leave empty for any amount</p>
+                <label className="text-sm font-medium">Amount (satoshis)</label>
+                <Input name="amount" type="number" step="1" placeholder="50000" className="mt-1" />
               </div>
               <div>
                 <label className="text-sm font-medium">Description</label>
-                <Textarea placeholder="Coffee, Web Design, Donation..." className="mt-1" />
+                <Textarea name="memo" placeholder="Coffee, Web Design, Donation..." className="mt-1" />
               </div>
               <div className="flex gap-4">
                 <label className="flex items-center gap-2 text-sm">
-                  <input type="radio" name="type" value="SINGLE" className="accent-primary" />
+                  <input
+                    type="radio"
+                    name="type"
+                    value="SINGLE"
+                    checked={linkType === "SINGLE"}
+                    onChange={() => setLinkType("SINGLE")}
+                    className="accent-primary"
+                  />
                   Single Use
                 </label>
                 <label className="flex items-center gap-2 text-sm">
-                  <input type="radio" name="type" value="MULTI" defaultChecked className="accent-primary" />
+                  <input
+                    type="radio"
+                    name="type"
+                    value="MULTI"
+                    checked={linkType === "MULTI"}
+                    onChange={() => setLinkType("MULTI")}
+                    className="accent-primary"
+                  />
                   Multi Use
                 </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="type"
+                    value="RECURRING"
+                    checked={linkType === "RECURRING"}
+                    onChange={() => setLinkType("RECURRING")}
+                    className="accent-primary"
+                  />
+                  Recurring
+                </label>
               </div>
+
+              {linkType === "RECURRING" && (
+                <div>
+                  <label className="text-sm font-medium">Billing Interval</label>
+                  <Select value={recurringInterval} onValueChange={setRecurringInterval}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Daily</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="yearly">Yearly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {/* Expiration */}
               <div>
@@ -178,7 +337,10 @@ export default function PaymentLinksPage() {
                 </div>
               </label>
 
-              <Button type="submit" className="w-full">Create Payment Link</Button>
+              <Button type="submit" className="w-full" disabled={creating}>
+                {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Create Payment Link
+              </Button>
             </form>
           </DialogContent>
         </Dialog>
@@ -186,69 +348,98 @@ export default function PaymentLinksPage() {
 
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b text-left text-sm text-muted-foreground">
-                  <th className="p-4 font-medium">Description</th>
-                  <th className="p-4 font-medium">Amount</th>
-                  <th className="p-4 font-medium">Type</th>
-                  <th className="p-4 font-medium">Status</th>
-                  <th className="p-4 font-medium">Collected</th>
-                  <th className="p-4 font-medium">Created</th>
-                  <th className="p-4 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mockLinks.map((link) => (
-                  <tr
-                    key={link.id}
-                    className="border-b last:border-0 hover:bg-muted/50 cursor-pointer"
-                    onClick={() => openDetail(link)}
-                  >
-                    <td className="p-4">
-                      <p className="font-medium text-sm">{link.memo}</p>
-                      <p className="text-xs text-muted-foreground font-mono">/pay/{link.slug}</p>
-                    </td>
-                    <td className="p-4">
-                      <p className="text-sm font-medium">{link.amountBch ? `${link.amountBch} BCH` : "Any"}</p>
-                      <p className="text-xs text-muted-foreground">{link.amountUsd}</p>
-                    </td>
-                    <td className="p-4">
-                      <Badge variant="outline" className="text-xs">{link.type === "SINGLE" ? "Single" : "Multi"}</Badge>
-                    </td>
-                    <td className="p-4">
-                      <Badge variant={statusColors[link.status]} className="text-xs">{link.status}</Badge>
-                    </td>
-                    <td className="p-4">
-                      <p className="text-sm">{link.totalCollected}</p>
-                      <p className="text-xs text-muted-foreground">{link.payCount} payments</p>
-                    </td>
-                    <td className="p-4 text-sm text-muted-foreground">{link.created}</td>
-                    <td className="p-4">
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => copyLink(link.slug, e)}>
-                          <Copy className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openDetail(link); }}>
-                          <QrCode className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" asChild onClick={(e) => e.stopPropagation()}>
-                          <a href={`https://bchpay.app/pay/${link.slug}`} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                        </Button>
-                      </div>
-                    </td>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b text-left text-sm text-muted-foreground">
+                    <th className="p-4 font-medium">Description</th>
+                    <th className="p-4 font-medium">Amount</th>
+                    <th className="p-4 font-medium">Type</th>
+                    <th className="p-4 font-medium">Status</th>
+                    <th className="p-4 font-medium">Interval</th>
+                    <th className="p-4 font-medium">Created</th>
+                    <th className="p-4 font-medium">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {links.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                        No payment links yet. Create your first one!
+                      </td>
+                    </tr>
+                  ) : (
+                    links.map((link) => (
+                      <tr
+                        key={link.id}
+                        className="border-b last:border-0 hover:bg-muted/50 cursor-pointer"
+                        onClick={() => openDetail(link)}
+                      >
+                        <td className="p-4">
+                          <p className="font-medium text-sm">{link.memo || "Untitled"}</p>
+                          <p className="text-xs text-muted-foreground font-mono">/pay/{link.slug}</p>
+                        </td>
+                        <td className="p-4">
+                          <p className="text-sm font-medium">
+                            {link.amount_satoshis ? formatBch(link.amount_satoshis) : "Any"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {link.amount_satoshis ? formatUsd(link.amount_satoshis) : ""}
+                          </p>
+                        </td>
+                        <td className="p-4">
+                          <Badge
+                            variant={link.type === "RECURRING" ? "default" : "outline"}
+                            className="text-xs"
+                          >
+                            {typeLabels[link.type] || link.type}
+                          </Badge>
+                        </td>
+                        <td className="p-4">
+                          <Badge variant={statusColors[link.status]} className="text-xs">
+                            {link.status}
+                          </Badge>
+                        </td>
+                        <td className="p-4 text-sm text-muted-foreground capitalize">
+                          {link.recurring_interval || "-"}
+                          {link.recurring_count ? ` (${link.recurring_count}x)` : ""}
+                        </td>
+                        <td className="p-4 text-sm text-muted-foreground">
+                          {new Date(link.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        </td>
+                        <td className="p-4">
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => copyLink(link.slug, e)}>
+                              <Copy className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openDetail(link); }}>
+                              <QrCode className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" asChild onClick={(e) => e.stopPropagation()}>
+                              <a href={`/pay/${link.slug}`} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      <PaymentLinkDetail link={selectedLink} open={detailOpen} onOpenChange={setDetailOpen} />
+      {selectedLink && (
+        <PaymentLinkDetail link={adaptForDetail(selectedLink)} open={detailOpen} onOpenChange={setDetailOpen} />
+      )}
     </div>
   );
 }

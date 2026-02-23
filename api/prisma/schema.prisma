@@ -18,14 +18,16 @@ model Merchant {
   created_at   DateTime @default(now())
   updated_at   DateTime @updatedAt
 
-  payment_links     PaymentLink[]
-  invoices          Invoice[]
-  transactions      Transaction[]
-  webhooks          Webhook[]
-  api_keys          ApiKey[]
-  devices           Device[]
+  payment_links      PaymentLink[]
+  invoices           Invoice[]
+  transactions       Transaction[]
+  webhooks           Webhook[]
+  api_keys           ApiKey[]
+  devices            Device[]
   cashtoken_configs  CashtokenConfig[]
   contract_instances ContractInstance[]
+  token_issuances    TokenIssuance[]
+  receipt_nfts       ReceiptNFT[]
 
   @@map("merchants")
 }
@@ -33,6 +35,7 @@ model Merchant {
 enum PaymentLinkType {
   SINGLE
   MULTI
+  RECURRING
 }
 
 enum PaymentLinkStatus {
@@ -50,10 +53,13 @@ model PaymentLink {
   type             PaymentLinkType   @default(SINGLE)
   status           PaymentLinkStatus @default(ACTIVE)
   slug             String            @unique
-  payment_address  String?
-  derivation_index Int?
-  expires_at       DateTime?
-  created_at       DateTime          @default(now())
+  payment_address    String?
+  derivation_index   Int?
+  recurring_interval String?
+  recurring_count    Int               @default(0)
+  last_paid_at       DateTime?
+  expires_at         DateTime?
+  created_at         DateTime          @default(now())
 
   merchant     Merchant      @relation(fields: [merchant_id], references: [id])
   transactions Transaction[]
@@ -194,9 +200,49 @@ model CashtokenConfig {
   created_at     DateTime         @default(now())
 
   merchant Merchant @relation(fields: [merchant_id], references: [id])
+  issuances TokenIssuance[]
+  receipts  ReceiptNFT[]
 
   @@index([merchant_id])
   @@map("cashtoken_configs")
+}
+
+model TokenIssuance {
+  id               String   @id @default(cuid())
+  config_id        String
+  merchant_id      String
+  customer_address String
+  amount           BigInt
+  tx_hash          String?
+  created_at       DateTime @default(now())
+
+  config   CashtokenConfig @relation(fields: [config_id], references: [id])
+  merchant Merchant        @relation(fields: [merchant_id], references: [id])
+
+  @@index([merchant_id])
+  @@index([config_id])
+  @@map("token_issuances")
+}
+
+model ReceiptNFT {
+  id               String   @id @default(cuid())
+  config_id        String?
+  merchant_id      String
+  customer_address String
+  nft_category     String
+  commitment       String
+  tx_hash          String?
+  mint_tx_hash     String?
+  amount_satoshis  BigInt
+  memo             String?
+  created_at       DateTime @default(now())
+
+  config   CashtokenConfig? @relation(fields: [config_id], references: [id])
+  merchant Merchant         @relation(fields: [merchant_id], references: [id])
+
+  @@index([merchant_id])
+  @@index([nft_category])
+  @@map("receipt_nfts")
 }
 
 enum ContractType {

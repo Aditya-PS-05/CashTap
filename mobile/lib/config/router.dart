@@ -11,6 +11,8 @@ import '../screens/scan_screen.dart';
 import '../screens/activity_screen.dart';
 import '../screens/settings_screen.dart';
 import '../screens/transaction_detail_screen.dart';
+import '../screens/payment_links_screen.dart';
+import '../screens/contracts_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -114,6 +116,16 @@ GoRouter createRouter(AuthProvider authProvider) {
           final id = state.pathParameters['id']!;
           return TransactionDetailScreen(transactionId: id);
         },
+      ),
+      GoRoute(
+        path: '/payment-links',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const PaymentLinksScreen(),
+      ),
+      GoRoute(
+        path: '/contracts',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const ContractsScreen(),
       ),
     ],
   );

@@ -43,6 +43,7 @@ describe("cashTokenService.issueLoyaltyTokens", () => {
     prismaMock.cashtokenConfig.findFirst.mockResolvedValue(
       cashtokenConfigFixture({ token_symbol: "SHOP" })
     );
+    prismaMock.tokenIssuance.create.mockResolvedValue({ id: "ti1" });
 
     // Default rate: 1 token per 1000 sats; 5000 sats = 5 tokens
     const result = await cashTokenService.issueLoyaltyTokens("m1", "bchtest:q", 5000n);
@@ -69,6 +70,7 @@ describe("cashTokenService.mintReceiptNFT", () => {
     prismaMock.cashtokenConfig.findFirst.mockResolvedValue(
       cashtokenConfigFixture({ purpose: "RECEIPT", token_category: "r".repeat(64) })
     );
+    prismaMock.receiptNFT.create.mockResolvedValue({ id: "rn1" });
 
     const result = await cashTokenService.mintReceiptNFT("m1", "bchtest:q", {
       txHash: "abcdef1234567890",
@@ -79,10 +81,12 @@ describe("cashTokenService.mintReceiptNFT", () => {
     expect(result.nftCategory).toHaveLength(64);
     expect(result.commitment).toHaveLength(40); // 20 bytes = 40 hex chars
     expect(result.txHash).toBeDefined();
+    expect(result.receiptId).toBe("rn1");
   });
 
   it("handles missing receipt config gracefully", async () => {
     prismaMock.cashtokenConfig.findFirst.mockResolvedValue(null);
+    prismaMock.receiptNFT.create.mockResolvedValue({ id: "rn2" });
     const result = await cashTokenService.mintReceiptNFT("m1", "bchtest:q", {
       txHash: "tx1",
       amountSats: 1000n,
@@ -93,6 +97,7 @@ describe("cashTokenService.mintReceiptNFT", () => {
 
   it("handles missing memo in commitment", async () => {
     prismaMock.cashtokenConfig.findFirst.mockResolvedValue(null);
+    prismaMock.receiptNFT.create.mockResolvedValue({ id: "rn3" });
     const result = await cashTokenService.mintReceiptNFT("m1", "bchtest:q", {
       txHash: "tx2",
       amountSats: 2000n,
@@ -161,17 +166,33 @@ describe("cashTokenService.getTokenStats", () => {
     prismaMock.cashtokenConfig.findFirst
       .mockResolvedValueOnce(cashtokenConfigFixture({ token_symbol: "SHOP" }))
       .mockResolvedValueOnce(cashtokenConfigFixture({ purpose: "RECEIPT" }));
+    prismaMock.tokenIssuance.aggregate.mockResolvedValue({
+      _sum: { amount: 500n },
+      _count: { id: 10 },
+    });
+    prismaMock.receiptNFT.count.mockResolvedValue(5);
 
     const stats = await cashTokenService.getTokenStats("m1");
     expect(stats.loyaltyTokens.configured).toBe(true);
     expect(stats.loyaltyTokens.symbol).toBe("SHOP");
+    expect(stats.loyaltyTokens.totalIssued).toBe(500);
+    expect(stats.loyaltyTokens.issuanceCount).toBe(10);
     expect(stats.receiptNFTs.configured).toBe(true);
+    expect(stats.receiptNFTs.totalMinted).toBe(5);
   });
 
   it("returns unconfigured when no tokens exist", async () => {
     prismaMock.cashtokenConfig.findFirst.mockResolvedValue(null);
+    prismaMock.tokenIssuance.aggregate.mockResolvedValue({
+      _sum: { amount: null },
+      _count: { id: 0 },
+    });
+    prismaMock.receiptNFT.count.mockResolvedValue(0);
+
     const stats = await cashTokenService.getTokenStats("m1");
     expect(stats.loyaltyTokens.configured).toBe(false);
     expect(stats.receiptNFTs.configured).toBe(false);
+    expect(stats.loyaltyTokens.totalIssued).toBe(0);
+    expect(stats.receiptNFTs.totalMinted).toBe(0);
   });
 });

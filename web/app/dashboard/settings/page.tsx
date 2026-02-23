@@ -1,5 +1,7 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +9,84 @@ import { Badge } from "@/components/ui/badge";
 import { Copy, Key, Plus, Trash2, Webhook } from "lucide-react";
 import { toast } from "sonner";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
+
 export default function SettingsPage() {
+  const router = useRouter();
+  const [loyaltyEnabled, setLoyaltyEnabled] = useState(false);
+  const [receiptsEnabled, setReceiptsEnabled] = useState(false);
+  const [loadingTokens, setLoadingTokens] = useState(true);
+
+  useEffect(() => {
+    fetchTokenStatus();
+  }, []);
+
+  async function getAuthToken(): Promise<string | null> {
+    try {
+      const res = await fetch("/api/auth/session", { credentials: "include" });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.accessToken || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function fetchTokenStatus() {
+    const token = await getAuthToken();
+    if (!token) {
+      setLoadingTokens(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/cashtokens/loyalty/stats`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLoyaltyEnabled(data.stats.loyaltyTokens.configured);
+        setReceiptsEnabled(data.stats.receiptNFTs.configured);
+      }
+    } catch {
+      // Stats not available
+    } finally {
+      setLoadingTokens(false);
+    }
+  }
+
+  async function handleLoyaltyToggle() {
+    if (!loyaltyEnabled) {
+      router.push("/dashboard/tokens");
+    }
+  }
+
+  async function handleReceiptsToggle() {
+    if (receiptsEnabled) return;
+
+    const token = await getAuthToken();
+    if (!token) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/cashtokens/receipts/enable`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        setReceiptsEnabled(true);
+        toast.success("Receipt NFTs enabled!");
+      } else if (res.status === 409) {
+        setReceiptsEnabled(true);
+        toast.info("Receipt NFTs already enabled");
+      } else {
+        toast.error("Failed to enable receipt NFTs");
+      }
+    } catch {
+      toast.error("Network error");
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
@@ -103,14 +182,26 @@ export default function SettingsPage() {
               <p className="text-sm font-medium">CashToken Loyalty</p>
               <p className="text-xs text-muted-foreground">Issue loyalty tokens on purchases</p>
             </div>
-            <input type="checkbox" className="h-4 w-4 accent-primary" />
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-primary"
+              checked={loyaltyEnabled}
+              disabled={loadingTokens}
+              onChange={handleLoyaltyToggle}
+            />
           </div>
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium">Receipt NFTs</p>
               <p className="text-xs text-muted-foreground">Mint receipt NFTs for each transaction</p>
             </div>
-            <input type="checkbox" className="h-4 w-4 accent-primary" />
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-primary"
+              checked={receiptsEnabled}
+              disabled={loadingTokens}
+              onChange={handleReceiptsToggle}
+            />
           </div>
           <Button size="sm">Save Settings</Button>
         </CardContent>

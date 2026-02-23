@@ -382,7 +382,32 @@ class TransactionMonitor {
         `[Monitor] Payment recorded: ${txHash} - ${amount} sats - ${status}`
       );
 
-      // If this is a single-use payment link, deactivate it
+      // Auto-issue CashTokens (loyalty + receipt NFTs) if enabled via env
+      try {
+        const { cashTokenService } = await import("./cashtoken.js");
+
+        if (process.env.CASHTOKEN_AUTO_ISSUE !== "false") {
+          const loyalty = await cashTokenService.issueLoyaltyTokens(merchantId, "unknown", amount);
+          if (loyalty.tokensIssued > 0n) {
+            console.log(`[Monitor] Auto-issued ${loyalty.tokensIssued} ${loyalty.tokenSymbol}`);
+          }
+        }
+
+        if (process.env.CASHTOKEN_AUTO_RECEIPT !== "false") {
+          const receiptCfg = await prisma.cashtokenConfig.findFirst({
+            where: { merchant_id: merchantId, purpose: "RECEIPT", active: true },
+          });
+          if (receiptCfg) {
+            await cashTokenService.mintReceiptNFT(merchantId, "unknown", {
+              txHash, amountSats: amount, timestamp: new Date(),
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("[Monitor] CashToken auto-issue failed:", err);
+      }
+
+      // Handle link type-specific behavior
       const paymentLink = await prisma.paymentLink.findUnique({
         where: { id: paymentLinkId },
       });
@@ -393,6 +418,15 @@ class TransactionMonitor {
         });
         // No longer need to watch this address
         this.unwatch(address);
+      } else if (paymentLink?.type === "RECURRING") {
+        // Increment recurring count and update last_paid_at, keep ACTIVE
+        await prisma.paymentLink.update({
+          where: { id: paymentLinkId },
+          data: {
+            recurring_count: { increment: 1 },
+            last_paid_at: new Date(),
+          },
+        });
       }
 
       // Deliver webhook notification

@@ -9,22 +9,31 @@ const paymentLinks = new Hono<AppEnv>();
 
 // --- Schemas ---
 
-const createPaymentLinkSchema = z.object({
-  amount_satoshis: z
-    .number()
-    .int()
-    .positive("Amount must be a positive integer (satoshis)"),
-  currency: z.string().default("BCH"),
-  memo: z.string().max(500).optional(),
-  type: z.enum(["SINGLE", "MULTI"]).default("SINGLE"),
-  expires_at: z.string().datetime().optional(),
-});
+const createPaymentLinkSchema = z
+  .object({
+    amount_satoshis: z
+      .number()
+      .int()
+      .positive("Amount must be a positive integer (satoshis)"),
+    currency: z.string().default("BCH"),
+    memo: z.string().max(500).optional(),
+    type: z.enum(["SINGLE", "MULTI", "RECURRING"]).default("SINGLE"),
+    recurring_interval: z
+      .enum(["daily", "weekly", "monthly", "yearly"])
+      .optional(),
+    expires_at: z.string().datetime().optional(),
+  })
+  .refine(
+    (data) => data.type !== "RECURRING" || !!data.recurring_interval,
+    { message: "recurring_interval is required for RECURRING links", path: ["recurring_interval"] },
+  );
 
 const updatePaymentLinkSchema = z.object({
   amount_satoshis: z.number().int().positive().optional(),
   currency: z.string().optional(),
   memo: z.string().max(500).optional().nullable(),
-  type: z.enum(["SINGLE", "MULTI"]).optional(),
+  type: z.enum(["SINGLE", "MULTI", "RECURRING"]).optional(),
+  recurring_interval: z.enum(["daily", "weekly", "monthly", "yearly"]).optional().nullable(),
   status: z.enum(["ACTIVE", "INACTIVE", "EXPIRED"]).optional(),
   expires_at: z.string().datetime().optional().nullable(),
 });
@@ -33,7 +42,7 @@ const listQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   status: z.enum(["ACTIVE", "INACTIVE", "EXPIRED"]).optional(),
-  type: z.enum(["SINGLE", "MULTI"]).optional(),
+  type: z.enum(["SINGLE", "MULTI", "RECURRING"]).optional(),
 });
 
 // --- Routes ---
@@ -54,7 +63,7 @@ paymentLinks.post("/", authMiddleware, async (c) => {
   }
 
   const merchantId = c.get("merchantId") as string;
-  const { amount_satoshis, currency, memo, type, expires_at } = parsed.data;
+  const { amount_satoshis, currency, memo, type, recurring_interval, expires_at } = parsed.data;
 
   const slug = nanoid(12);
 
@@ -79,6 +88,7 @@ paymentLinks.post("/", authMiddleware, async (c) => {
       currency,
       memo: memo ?? null,
       type,
+      recurring_interval: recurring_interval ?? null,
       slug,
       payment_address: paymentAddress,
       derivation_index: derivationIndex,

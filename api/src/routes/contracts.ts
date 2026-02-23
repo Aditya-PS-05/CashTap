@@ -44,7 +44,68 @@ const createSavingsVaultSchema = z.object({
     .positive("Locktime must be a positive integer (block height or unix timestamp)"),
 });
 
+const listContractsSchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  type: z.enum(["ESCROW", "SPLIT_PAYMENT", "SAVINGS_VAULT"]).optional(),
+  status: z.enum(["ACTIVE", "COMPLETED", "EXPIRED"]).optional(),
+});
+
+const updateStatusSchema = z.object({
+  status: z.enum(["COMPLETED", "EXPIRED"]),
+});
+
 // --- Routes ---
+
+/**
+ * GET /api/contracts
+ * List the authenticated merchant's contract instances (paginated).
+ */
+contracts.get("/", authMiddleware, async (c) => {
+  const query = listContractsSchema.safeParse(c.req.query());
+  if (!query.success) {
+    return c.json(
+      { error: "Invalid query parameters", details: query.error.flatten() },
+      400
+    );
+  }
+
+  const merchantId = c.get("merchantId") as string;
+  const { page, limit, type, status } = query.data;
+  const skip = (page - 1) * limit;
+
+  const where: Record<string, unknown> = { merchant_id: merchantId };
+  if (type) where.contract_type = type;
+  if (status) where.status = status;
+
+  const [contracts_list, total] = await Promise.all([
+    prisma.contractInstance.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { created_at: "desc" },
+    }),
+    prisma.contractInstance.count({ where }),
+  ]);
+
+  return c.json({
+    contracts: contracts_list.map((inst) => ({
+      id: inst.id,
+      type: inst.contract_type,
+      address: inst.contract_address,
+      token_address: inst.token_address,
+      constructor_args: inst.constructor_args,
+      status: inst.status,
+      created_at: inst.created_at,
+    })),
+    pagination: {
+      page,
+      limit,
+      total,
+      total_pages: Math.ceil(total / limit),
+    },
+  });
+});
 
 /**
  * GET /api/contracts/types
@@ -232,6 +293,56 @@ contracts.post("/savings-vault", authMiddleware, async (c) => {
     },
     201
   );
+});
+
+/**
+ * PATCH /api/contracts/:id/status
+ * Update contract status (only from ACTIVE → COMPLETED or EXPIRED).
+ */
+contracts.patch("/:id/status", authMiddleware, async (c) => {
+  const id = c.req.param("id");
+  const merchantId = c.get("merchantId") as string;
+  const body = await c.req.json();
+  const parsed = updateStatusSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return c.json(
+      { error: "Validation failed", details: parsed.error.flatten() },
+      400
+    );
+  }
+
+  const instance = await prisma.contractInstance.findFirst({
+    where: { id, merchant_id: merchantId },
+  });
+
+  if (!instance) {
+    return c.json({ error: "Contract instance not found" }, 404);
+  }
+
+  if (instance.status !== "ACTIVE") {
+    return c.json(
+      { error: `Cannot transition from ${instance.status} to ${parsed.data.status}` },
+      400
+    );
+  }
+
+  const updated = await prisma.contractInstance.update({
+    where: { id },
+    data: { status: parsed.data.status },
+  });
+
+  return c.json({
+    contract: {
+      id: updated.id,
+      type: updated.contract_type,
+      address: updated.contract_address,
+      token_address: updated.token_address,
+      constructor_args: updated.constructor_args,
+      status: updated.status,
+      created_at: updated.created_at,
+    },
+  });
 });
 
 /**

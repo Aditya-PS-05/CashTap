@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../config/constants.dart';
+import '../models/contract_instance.dart';
 import '../models/merchant.dart';
 import '../models/payment_link.dart';
 import '../models/transaction.dart';
@@ -122,26 +123,54 @@ class ApiService {
   // ---- Payment Links ----
 
   Future<PaymentLink> createPaymentLink({
+    required int amountSatoshis,
+    String memo = '',
+    PaymentLinkType type = PaymentLinkType.single,
+    String? recurringInterval,
+    String? expiresAt,
+  }) async {
+    try {
+      final data = <String, dynamic>{
+        'amount_satoshis': amountSatoshis,
+        'memo': memo,
+        'type': type.apiValue,
+      };
+      if (type == PaymentLinkType.recurring && recurringInterval != null) {
+        data['recurring_interval'] = recurringInterval;
+      }
+      if (expiresAt != null) {
+        data['expires_at'] = expiresAt;
+      }
+
+      final response = await _dio.post('/api/payment-links', data: data);
+      return PaymentLink.fromJson(response.data as Map<String, dynamic>);
+    } on DioException {
+      return _mockCreatePaymentLink(amountSatoshis, memo, type);
+    }
+  }
+
+  /// Legacy createPaymentLink for POS screen backward compatibility.
+  Future<PaymentLink> createPaymentLinkLegacy({
     required double amountBch,
     required double amountUsd,
     String memo = '',
   }) async {
-    try {
-      final response = await _dio.post('/payments/links', data: {
-        'amount_bch': amountBch,
-        'amount_usd': amountUsd,
-        'memo': memo,
-      });
-      return PaymentLink.fromJson(response.data as Map<String, dynamic>);
-    } on DioException {
-      return _mockCreatePaymentLink(amountBch, amountUsd, memo);
-    }
+    final amountSatoshis = (amountBch * 100000000).round();
+    return createPaymentLink(
+      amountSatoshis: amountSatoshis,
+      memo: memo,
+      type: PaymentLinkType.single,
+    );
   }
 
-  Future<List<PaymentLink>> getPaymentLinks() async {
+  Future<List<PaymentLink>> getPaymentLinks({int page = 1, int limit = 20}) async {
     try {
-      final response = await _dio.get('/payments/links');
-      final list = response.data as List<dynamic>;
+      final response = await _dio.get('/api/payment-links', queryParameters: {
+        'page': page,
+        'limit': limit,
+      });
+      final data = response.data as Map<String, dynamic>;
+      final list = data['payment_links'] as List<dynamic>? ?? [];
       return list.map((e) => PaymentLink.fromJson(e as Map<String, dynamic>)).toList();
     } on DioException {
       return [];
@@ -150,7 +179,7 @@ class ApiService {
 
   Future<PaymentLink> getPaymentLinkStatus(String slug) async {
     try {
-      final response = await _dio.get('/payments/links/$slug/status');
+      final response = await _dio.get('/api/payment-links/$slug');
       return PaymentLink.fromJson(response.data as Map<String, dynamic>);
     } on DioException {
       return PaymentLink(
@@ -206,10 +235,13 @@ class ApiService {
     }
   }
 
+  // ---- Price ----
+
   Future<double> getBchPrice() async {
     try {
-      final response = await _dio.get('/market/price');
-      return (response.data['price_usd'] as num).toDouble();
+      final response = await _dio.get('/api/price');
+      final data = response.data as Map<String, dynamic>;
+      return (data['bch_usd'] as num).toDouble();
     } on DioException {
       return 400.0; // Mock BCH/USD price
     }
@@ -223,6 +255,99 @@ class ApiService {
       return response.data as Map<String, dynamic>;
     } on DioException {
       return _mockDashboardStats();
+    }
+  }
+
+  // ---- Contracts ----
+
+  Future<List<ContractInstance>> getContracts({
+    int page = 1,
+    int limit = 20,
+    String? type,
+    String? status,
+  }) async {
+    try {
+      final queryParams = <String, dynamic>{
+        'page': page,
+        'limit': limit,
+      };
+      if (type != null) queryParams['type'] = type;
+      if (status != null) queryParams['status'] = status;
+
+      final response = await _dio.get('/api/contracts', queryParameters: queryParams);
+      final data = response.data as Map<String, dynamic>;
+      final list = data['contracts'] as List<dynamic>? ?? [];
+      return list.map((e) => ContractInstance.fromJson(e as Map<String, dynamic>)).toList();
+    } on DioException {
+      return [];
+    }
+  }
+
+  Future<ContractInstance> createEscrow({
+    required String buyerPkh,
+    required String sellerPkh,
+    required String arbiterPkh,
+    required int timeout,
+  }) async {
+    try {
+      final response = await _dio.post('/api/contracts/escrow', data: {
+        'buyer_pkh': buyerPkh,
+        'seller_pkh': sellerPkh,
+        'arbiter_pkh': arbiterPkh,
+        'timeout': timeout,
+      });
+      final data = response.data as Map<String, dynamic>;
+      return ContractInstance.fromJson(data['contract'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(e.response?.data?['error'] ?? 'Failed to create escrow');
+    }
+  }
+
+  Future<ContractInstance> createSplitPayment({
+    required String recipient1Pkh,
+    required String recipient2Pkh,
+    required int split1Percent,
+    required int split2Percent,
+  }) async {
+    try {
+      final response = await _dio.post('/api/contracts/split-payment', data: {
+        'recipient1_pkh': recipient1Pkh,
+        'recipient2_pkh': recipient2Pkh,
+        'split1_percent': split1Percent,
+        'split2_percent': split2Percent,
+      });
+      final data = response.data as Map<String, dynamic>;
+      return ContractInstance.fromJson(data['contract'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(e.response?.data?['error'] ?? 'Failed to create split payment');
+    }
+  }
+
+  Future<ContractInstance> createSavingsVault({
+    required String ownerPkh,
+    required int locktime,
+  }) async {
+    try {
+      final response = await _dio.post('/api/contracts/savings-vault', data: {
+        'owner_pkh': ownerPkh,
+        'locktime': locktime,
+      });
+      final data = response.data as Map<String, dynamic>;
+      return ContractInstance.fromJson(data['contract'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(e.response?.data?['error'] ?? 'Failed to create savings vault');
+    }
+  }
+
+  Future<ContractInstance> updateContractStatus(String id, String status) async {
+    try {
+      final response = await _dio.patch('/api/contracts/$id/status', data: {
+        'status': status,
+      });
+      final data = response.data as Map<String, dynamic>;
+      return ContractInstance.fromJson(data['contract'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(e.response?.data?['error'] ?? 'Failed to update contract');
     }
   }
 
@@ -259,16 +384,17 @@ class ApiService {
     );
   }
 
-  PaymentLink _mockCreatePaymentLink(double amountBch, double amountUsd, String memo) {
+  PaymentLink _mockCreatePaymentLink(int amountSatoshis, String memo, PaymentLinkType type) {
     final slug = 'pay_${DateTime.now().millisecondsSinceEpoch}';
     return PaymentLink(
       id: slug,
       slug: slug,
       merchantId: 'mock_merchant_1',
-      amountBch: amountBch,
-      amountUsd: amountUsd,
+      amountBch: amountSatoshis / 100000000.0,
+      amountSatoshis: amountSatoshis,
       paymentAddress: 'bitcoincash:qz2g6d7cl2kcnl4lek2jrm9lkgmtxmftqsed25faq',
       memo: memo,
+      type: type,
     );
   }
 

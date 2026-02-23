@@ -10,6 +10,8 @@ import transactionRoutes from "./routes/transactions.js";
 import invoiceRoutes from "./routes/invoices.js";
 import deviceRoutes from "./routes/devices.js";
 import contractRoutes from "./routes/contracts.js";
+import cashtokenRoutes from "./routes/cashtokens.js";
+import priceRoutes from "./routes/price.js";
 
 const app = new Hono();
 
@@ -101,6 +103,8 @@ app.route("/api/transactions", transactionRoutes);
 app.route("/api/invoices", invoiceRoutes);
 app.route("/api/devices", deviceRoutes);
 app.route("/api/contracts", contractRoutes);
+app.route("/api/cashtokens", cashtokenRoutes);
+app.route("/api/price", priceRoutes);
 
 // ---------------------------------------------------------------------------
 // Start server

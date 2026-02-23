@@ -127,3 +127,38 @@ export function cashtokenConfigFixture(overrides: Record<string, unknown> = {}) 
     ...overrides,
   };
 }
+
+export function tokenIssuanceFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "clti0000000000000001",
+    config_id: "clct0000000000000001",
+    merchant_id: "cltest000000000000001",
+    customer_address: "bchtest:qzcustomer000000000000000000000000000000000",
+    amount: BigInt(50),
+    tx_hash: "loyalty_test123",
+    created_at: new Date("2025-01-01"),
+    ...overrides,
+  };
+}
+
+export function receiptNFTFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "clrn0000000000000001",
+    config_id: "clct0000000000000001",
+    merchant_id: "cltest000000000000001",
+    customer_address: "bchtest:qzcustomer000000000000000000000000000000000",
+    nft_category: "b".repeat(64),
+    commitment: "0".repeat(40),
+    tx_hash: "abc123",
+    mint_tx_hash: "nft_test123",
+    amount_satoshis: BigInt(50000),
+    memo: "Test payment",
+    created_at: new Date("2025-01-01"),
+    merchant: {
+      id: "cltest000000000000001",
+      business_name: "Test Merchant",
+      logo_url: null,
+    },
+    ...overrides,
+  };
+}

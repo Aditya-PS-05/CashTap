@@ -254,6 +254,37 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(height: 28),
 
+        // Quick access cards
+        Text(
+          'Quick Actions',
+          style: theme.textTheme.titleLarge,
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildQuickActionCard(
+                theme,
+                icon: Icons.link,
+                label: 'Payment Links',
+                color: AppTheme.bchGreen,
+                onTap: () => context.push('/payment-links'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildQuickActionCard(
+                theme,
+                icon: Icons.description_outlined,
+                label: 'Contracts',
+                color: AppTheme.pendingBlue,
+                onTap: () => context.push('/contracts'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 28),
+
         // Weekly revenue chart
         Text(
           'Weekly Revenue',
@@ -366,7 +397,7 @@ class _HomeScreenState extends State<HomeScreen> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () => context.go('/pos'),
+              onPressed: () => context.push('/payment-links'),
               icon: const Icon(Icons.link, size: 20),
               label: const Text('Create a payment link'),
               style: OutlinedButton.styleFrom(
@@ -532,6 +563,53 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             );
           }),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActionCard(
+    ThemeData theme, {
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_ios,
+                size: 14,
+                color: theme.textTheme.bodySmall?.color,
+              ),
+            ],
+          ),
         ),
       ),
     );

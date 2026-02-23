@@ -11,6 +11,8 @@ import transactionRoutes from "../../src/routes/transactions.js";
 import invoiceRoutes from "../../src/routes/invoices.js";
 import deviceRoutes from "../../src/routes/devices.js";
 import contractRoutes from "../../src/routes/contracts.js";
+import cashtokenRoutes from "../../src/routes/cashtokens.js";
+import priceRoutes from "../../src/routes/price.js";
 
 export function createTestApp(): Hono {
   const app = new Hono();
@@ -42,6 +44,8 @@ export function createTestApp(): Hono {
   app.route("/api/invoices", invoiceRoutes);
   app.route("/api/devices", deviceRoutes);
   app.route("/api/contracts", contractRoutes);
+  app.route("/api/cashtokens", cashtokenRoutes);
+  app.route("/api/price", priceRoutes);
 
   return app;
 }
