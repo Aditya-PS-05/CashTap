@@ -42,4 +42,4 @@ ENV NODE_ENV=production
 EXPOSE 3456
 
 # Use prisma binary directly — zero dependency on any package manager
-CMD ["sh", "-c", "node node_modules/prisma/build/index.js db push --skip-generate && node dist/index.js"]
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js db execute --schema prisma/schema.prisma --file prisma/backfill-emails.sql 2>/dev/null; node node_modules/prisma/build/index.js db push --skip-generate --accept-data-loss && node dist/index.js"]
