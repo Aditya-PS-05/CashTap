@@ -128,7 +128,9 @@ class PaymentLink {
       amountBch: (data['amount_bch'] as num?)?.toDouble() ?? amountSats / 100000000.0,
       amountUsd: (data['amount_usd'] as num?)?.toDouble() ?? 0.0,
       amountSatoshis: amountSats,
-      paymentAddress: data['payment_address'] as String? ?? '',
+      paymentAddress: data['payment_address'] as String?
+          ?? (data['merchant'] as Map<String, dynamic>?)?['bch_address'] as String?
+          ?? '',
       memo: data['memo'] as String? ?? '',
       status: PaymentLinkStatus.fromString(data['status'] as String? ?? 'ACTIVE'),
       type: PaymentLinkType.fromString(data['type'] as String? ?? 'SINGLE'),
