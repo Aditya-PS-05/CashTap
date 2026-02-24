@@ -587,11 +587,21 @@ class WalletService {
         return txId;
       }
 
-      if (!senderAddress) {
-        throw new Error("No wallet available for broadcasting — provide sender_address");
+      // Fall back to a watch wallet from sender address or any known address
+      let address = senderAddress;
+      if (!address) {
+        const anyUser = await prisma.merchant.findFirst({
+          where: { bch_address: { not: null } },
+          select: { bch_address: true },
+        });
+        address = anyUser?.bch_address ?? undefined;
       }
 
-      const watchWallet = await WatchWalletClass.watchOnly(senderAddress);
+      if (!address) {
+        throw new Error("No address available for broadcasting");
+      }
+
+      const watchWallet = await WatchWalletClass.watchOnly(address);
       const txId = await watchWallet.submitTransaction(
         Uint8Array.from(Buffer.from(rawTxHex, "hex"))
       );
