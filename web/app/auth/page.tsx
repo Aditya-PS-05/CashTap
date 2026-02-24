@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,12 +14,23 @@ type Mode = "signin" | "signup";
 
 export default function AuthPage() {
   const router = useRouter();
-  const { login, register, user } = useAuth();
+  const { login, register, isAuthenticated, isLoading, address, role } = useAuth();
   const [mode, setMode] = useState<Mode>("signin");
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Redirect authenticated users to the right place
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      if (address) {
+        router.replace(role === "MERCHANT" ? "/dashboard" : "/buyer");
+      } else {
+        router.replace("/onboarding");
+      }
+    }
+  }, [isLoading, isAuthenticated, address, role, router]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,11 +43,8 @@ export default function AuthPage() {
     try {
       await login(email.trim(), password);
       toast.success("Welcome back!");
-      // Redirect based on wallet status — if no wallet, go to onboarding
-      router.push("/onboarding");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Login failed");
-    } finally {
       setLoading(false);
     }
   };
@@ -60,10 +68,9 @@ export default function AuthPage() {
     try {
       await register(email.trim(), password);
       toast.success("Account created!");
-      router.push("/onboarding");
+      // useEffect above will redirect to /onboarding
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Registration failed");
-    } finally {
       setLoading(false);
     }
   };
