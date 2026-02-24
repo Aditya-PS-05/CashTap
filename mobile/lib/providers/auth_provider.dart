@@ -165,6 +165,29 @@ class AuthProvider extends ChangeNotifier {
         _isOnboarded = true;
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool(AppConstants.onboardedKey, true);
+
+        // Cross-device wallet recovery: if no local seed but server has
+        // an encrypted wallet blob, decrypt it with the login password.
+        final existingSeed =
+            await _secureStorage.read(key: AppConstants.seedPhraseKey);
+        if (existingSeed == null) {
+          final encryptedWallet = user['encrypted_wallet'] as String?;
+          if (encryptedWallet != null && encryptedWallet.isNotEmpty) {
+            try {
+              final mnemonic = WalletCryptoService.decryptMnemonic(
+                encryptedWallet,
+                password,
+              );
+              await _secureStorage.write(
+                key: AppConstants.seedPhraseKey,
+                value: mnemonic,
+              );
+              debugPrint('Wallet recovered from encrypted backup');
+            } catch (e) {
+              debugPrint('Failed to decrypt wallet backup: $e');
+            }
+          }
+        }
       } else {
         _isOnboarded = false;
       }
@@ -192,8 +215,8 @@ class AuthProvider extends ChangeNotifier {
     return false;
   }
 
-  /// Set up the wallet: generate BIP39, store in secure storage, register with API.
-  Future<bool> setupWallet() async {
+  /// Set up the wallet: generate BIP39, encrypt with password, store locally + on server.
+  Future<bool> setupWallet(String password) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -202,7 +225,13 @@ class AuthProvider extends ChangeNotifier {
       // Generate wallet locally
       final keys = WalletCryptoService.createWallet();
 
-      // Store seed phrase and address securely
+      // Encrypt mnemonic with user's password for cross-device recovery
+      final encryptedWallet = WalletCryptoService.encryptMnemonic(
+        keys.mnemonic,
+        password,
+      );
+
+      // Store seed phrase and address securely on device
       await _secureStorage.write(
         key: AppConstants.seedPhraseKey,
         value: keys.mnemonic,
@@ -214,8 +243,11 @@ class AuthProvider extends ChangeNotifier {
 
       _walletAddress = keys.address;
 
-      // Register wallet address with API
-      await _apiService.registerWallet(bchAddress: keys.address);
+      // Register wallet address + encrypted backup with API
+      await _apiService.registerWallet(
+        bchAddress: keys.address,
+        encryptedWallet: encryptedWallet,
+      );
 
       // Mark as onboarded
       final prefs = await SharedPreferences.getInstance();
@@ -336,6 +368,46 @@ class AuthProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('Error updating merchant: $e');
+      return false;
+    }
+  }
+
+  /// Check if the local wallet seed exists.
+  Future<bool> hasSeedPhrase() async {
+    final seed = await _secureStorage.read(key: AppConstants.seedPhraseKey);
+    return seed != null && seed.isNotEmpty;
+  }
+
+  /// Recover wallet from server-stored encrypted backup.
+  /// Requires the user's login password to decrypt.
+  Future<bool> recoverWallet(String password) async {
+    try {
+      // Fetch profile which includes encrypted_wallet
+      final merchant = await _apiService.getMerchant();
+      final encryptedWallet = merchant.encryptedWallet;
+
+      if (encryptedWallet == null || encryptedWallet.isEmpty) {
+        _errorMessage = 'No wallet backup found on server';
+        notifyListeners();
+        return false;
+      }
+
+      final mnemonic = WalletCryptoService.decryptMnemonic(
+        encryptedWallet,
+        password,
+      );
+
+      await _secureStorage.write(
+        key: AppConstants.seedPhraseKey,
+        value: mnemonic,
+      );
+
+      debugPrint('Wallet recovered from encrypted backup');
+      return true;
+    } catch (e) {
+      _errorMessage = 'Failed to recover wallet: wrong password or corrupted backup';
+      debugPrint('Wallet recovery failed: $e');
+      notifyListeners();
       return false;
     }
   }

@@ -13,20 +13,33 @@ class OnboardScreen extends StatefulWidget {
 }
 
 class _OnboardScreenState extends State<OnboardScreen> {
+  final _passwordController = TextEditingController();
   bool _settingUp = false;
   bool _done = false;
+  bool _obscurePassword = true;
 
   @override
-  void initState() {
-    super.initState();
-    _setupWallet();
+  void dispose() {
+    _passwordController.dispose();
+    super.dispose();
   }
 
   Future<void> _setupWallet() async {
+    final password = _passwordController.text.trim();
+    if (password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter your password to encrypt your wallet'),
+          backgroundColor: AppTheme.errorRed,
+        ),
+      );
+      return;
+    }
+
     setState(() => _settingUp = true);
 
     final auth = context.read<AuthProvider>();
-    final success = await auth.setupWallet();
+    final success = await auth.setupWallet(password);
 
     if (!mounted) return;
 
@@ -55,7 +68,7 @@ class _OnboardScreenState extends State<OnboardScreen> {
     return Scaffold(
       body: SafeArea(
         child: Center(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 28),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -84,7 +97,7 @@ class _OnboardScreenState extends State<OnboardScreen> {
                       ? 'Wallet Created!'
                       : _settingUp
                           ? 'Setting Up Your Wallet...'
-                          : 'Wallet Setup',
+                          : 'Secure Your Wallet',
                   style: GoogleFonts.inter(
                     fontSize: 28,
                     fontWeight: FontWeight.w700,
@@ -96,8 +109,8 @@ class _OnboardScreenState extends State<OnboardScreen> {
                   _done
                       ? 'Your Bitcoin Cash wallet is ready to use.'
                       : _settingUp
-                          ? 'Generating your wallet securely...'
-                          : 'There was an issue setting up your wallet.',
+                          ? 'Generating and encrypting your wallet...'
+                          : 'Enter your password to encrypt your wallet for cross-device recovery.',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyLarge?.copyWith(
                     color: theme.textTheme.bodySmall?.color,
@@ -132,12 +145,47 @@ class _OnboardScreenState extends State<OnboardScreen> {
                     ),
                     const SizedBox(height: 16),
                   ],
-                  ElevatedButton(
-                    onPressed: _setupWallet,
-                    child: const Text('Retry'),
+                  TextField(
+                    controller: _passwordController,
+                    obscureText: _obscurePassword,
+                    decoration: InputDecoration(
+                      labelText: 'Account Password',
+                      hintText: 'Re-enter your login password',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                        ),
+                        onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
+                      ),
+                    ),
+                    onSubmitted: (_) => _setupWallet(),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Your seed phrase will be encrypted with this password and stored for recovery on other devices.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.6),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: _setupWallet,
+                      child: const Text('Set Up Wallet'),
+                    ),
                   ),
                 ],
-                if (auth.walletAddress != null && auth.walletAddress!.isNotEmpty) ...[
+                if (auth.walletAddress != null &&
+                    auth.walletAddress!.isNotEmpty) ...[
                   const SizedBox(height: 24),
                   Container(
                     padding: const EdgeInsets.all(12),

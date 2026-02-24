@@ -5,6 +5,7 @@ class Merchant {
   final String? bchAddress;
   final String? merchantAddress;
   final String? role;
+  final String? encryptedWallet;
   final String? logoUrl;
   final String? webhookUrl;
   final String displayCurrency;
@@ -18,6 +19,7 @@ class Merchant {
     this.bchAddress,
     this.merchantAddress,
     this.role,
+    this.encryptedWallet,
     this.logoUrl,
     this.webhookUrl,
     this.displayCurrency = 'BCH',
@@ -34,6 +36,7 @@ class Merchant {
       bchAddress: json['bch_address'] as String?,
       merchantAddress: json['merchant_address'] as String?,
       role: json['role'] as String?,
+      encryptedWallet: json['encrypted_wallet'] as String?,
       logoUrl: json['logo_url'] as String?,
       webhookUrl: json['webhook_url'] as String?,
       displayCurrency: json['display_currency'] as String? ?? 'BCH',
@@ -54,6 +57,7 @@ class Merchant {
       'bch_address': bchAddress,
       'merchant_address': merchantAddress,
       'role': role,
+      'encrypted_wallet': encryptedWallet,
       'logo_url': logoUrl,
       'webhook_url': webhookUrl,
       'display_currency': displayCurrency,
@@ -69,6 +73,7 @@ class Merchant {
     String? bchAddress,
     String? merchantAddress,
     String? role,
+    String? encryptedWallet,
     String? logoUrl,
     String? webhookUrl,
     String? displayCurrency,
@@ -82,6 +87,7 @@ class Merchant {
       bchAddress: bchAddress ?? this.bchAddress,
       merchantAddress: merchantAddress ?? this.merchantAddress,
       role: role ?? this.role,
+      encryptedWallet: encryptedWallet ?? this.encryptedWallet,
       logoUrl: logoUrl ?? this.logoUrl,
       webhookUrl: webhookUrl ?? this.webhookUrl,
       displayCurrency: displayCurrency ?? this.displayCurrency,

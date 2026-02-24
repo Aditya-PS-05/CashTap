@@ -74,10 +74,15 @@ class ApiService {
   /// Register a wallet address for the authenticated user.
   Future<Map<String, dynamic>> registerWallet({
     required String bchAddress,
+    String? encryptedWallet,
   }) async {
-    final response = await _dio.post('/api/wallet/register', data: {
+    final data = <String, dynamic>{
       'bch_address': bchAddress,
-    });
+    };
+    if (encryptedWallet != null) {
+      data['encrypted_wallet'] = encryptedWallet;
+    }
+    final response = await _dio.post('/api/wallet/register', data: data);
     return response.data as Map<String, dynamic>;
   }
 

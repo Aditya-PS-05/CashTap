@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:bip39/bip39.dart' as bip39;
@@ -157,6 +158,85 @@ class WalletCryptoService {
     sig.setRange(33, 65, _bigIntToBytes(normalizedS, 32));
 
     return base64.encode(sig);
+  }
+
+  /// Encrypt a mnemonic with a password for cross-device recovery.
+  /// Format: base64(salt[16] + iv[12] + ciphertext_with_tag)
+  /// PBKDF2 (100k iterations, SHA-256) + AES-256-GCM.
+  /// Compatible with the web's wallet-crypto.ts.
+  static String encryptMnemonic(String mnemonic, String password) {
+    // Generate random salt and IV using dart:math secure random
+    final rng = Random.secure();
+    final salt = Uint8List.fromList(List.generate(16, (_) => rng.nextInt(256)));
+    final iv = Uint8List.fromList(List.generate(12, (_) => rng.nextInt(256)));
+
+    // Derive key with PBKDF2 (100k iterations, SHA-256)
+    final pbkdf2 = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
+      ..init(Pbkdf2Parameters(salt, 100000, 32));
+    final key = pbkdf2.process(Uint8List.fromList(utf8.encode(password)));
+
+    // Encrypt with AES-256-GCM
+    final plaintext = Uint8List.fromList(utf8.encode(mnemonic));
+    final gcm = GCMBlockCipher(AESEngine())
+      ..init(
+        true,
+        AEADParameters(
+          KeyParameter(key),
+          128, // 128-bit (16-byte) tag
+          iv,
+          Uint8List(0), // no additional authenticated data
+        ),
+      );
+
+    final ciphertextWithTag = Uint8List(gcm.getOutputSize(plaintext.length));
+    var off = gcm.processBytes(plaintext, 0, plaintext.length, ciphertextWithTag, 0);
+    off += gcm.doFinal(ciphertextWithTag, off);
+
+    // Combine: salt[16] + iv[12] + ciphertext_with_tag
+    final combined = Uint8List(16 + 12 + off);
+    combined.setAll(0, salt);
+    combined.setAll(16, iv);
+    combined.setAll(28, ciphertextWithTag.sublist(0, off));
+
+    return base64.encode(combined);
+  }
+
+  /// Decrypt a mnemonic encrypted by the web app.
+  /// Format: base64(salt[16] + iv[12] + ciphertext_with_tag)
+  /// PBKDF2 (100k iterations, SHA-256) + AES-256-GCM.
+  static String decryptMnemonic(String blob, String password) {
+    final combined = base64.decode(blob);
+    if (combined.length < 29) {
+      throw Exception('Invalid encrypted wallet data');
+    }
+
+    final salt = Uint8List.fromList(combined.sublist(0, 16));
+    final iv = Uint8List.fromList(combined.sublist(16, 28));
+    final ciphertextWithTag = Uint8List.fromList(combined.sublist(28));
+
+    // Derive key with PBKDF2 (100k iterations, SHA-256)
+    final pbkdf2 = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
+      ..init(Pbkdf2Parameters(salt, 100000, 32));
+    final key = pbkdf2.process(Uint8List.fromList(utf8.encode(password)));
+
+    // Decrypt with AES-256-GCM (tag is appended to ciphertext by Web Crypto)
+    final gcm = GCMBlockCipher(AESEngine())
+      ..init(
+        false,
+        AEADParameters(
+          KeyParameter(key),
+          128, // 128-bit (16-byte) tag
+          iv,
+          Uint8List(0), // no additional authenticated data
+        ),
+      );
+
+    final plaintext = Uint8List(gcm.getOutputSize(ciphertextWithTag.length));
+    var off = gcm.processBytes(
+        ciphertextWithTag, 0, ciphertextWithTag.length, plaintext, 0);
+    off += gcm.doFinal(plaintext, off);
+
+    return utf8.decode(plaintext.sublist(0, off));
   }
 
   // ---------------------------------------------------------------------------

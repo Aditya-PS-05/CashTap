@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -26,6 +27,7 @@ class _SendScreenState extends State<SendScreen> {
   String _amountMode = 'BCH';
   String? _error;
   String? _txid;
+  bool _needsWalletRecovery = false;
 
   @override
   void initState() {
@@ -36,6 +38,82 @@ class _SendScreenState extends State<SendScreen> {
     }
     if (widget.prefillAmount != null) {
       _amountController.text = widget.prefillAmount!.toString();
+    }
+    _checkSeedAvailability();
+  }
+
+  Future<void> _checkSeedAvailability() async {
+    const storage = FlutterSecureStorage();
+    final seed = await storage.read(key: AppConstants.seedPhraseKey);
+    if (seed == null || seed.isEmpty) {
+      setState(() => _needsWalletRecovery = true);
+    }
+  }
+
+  Future<void> _showRecoveryDialog() async {
+    final passwordController = TextEditingController();
+    String? dialogError;
+
+    final recovered = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Wallet Recovery'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Your wallet was created on another device. Enter your password to decrypt it.',
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  errorText: dialogError,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final password = passwordController.text;
+                if (password.isEmpty) {
+                  setDialogState(() => dialogError = 'Enter your password');
+                  return;
+                }
+                setDialogState(() => dialogError = null);
+
+                final auth = context.read<AuthProvider>();
+                final ok = await auth.recoverWallet(password);
+                if (ok) {
+                  if (ctx.mounted) Navigator.of(ctx).pop(true);
+                } else {
+                  setDialogState(() => dialogError = 'Wrong password');
+                }
+              },
+              child: const Text('Decrypt'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    passwordController.dispose();
+
+    if (recovered == true) {
+      setState(() {
+        _needsWalletRecovery = false;
+        _error = null;
+      });
     }
   }
 
@@ -253,7 +331,33 @@ class _SendScreenState extends State<SendScreen> {
         const SizedBox(height: 24),
         Text('Review Transaction', style: theme.textTheme.titleMedium),
         const SizedBox(height: 20),
-        if (_error != null) ...[
+        if (_needsWalletRecovery) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.vpn_key, color: Colors.orange, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Wallet created on another device. Tap to recover.',
+                    style: theme.textTheme.bodySmall?.copyWith(color: Colors.orange),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _showRecoveryDialog,
+                  child: const Text('Recover'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+        if (_error != null && !_needsWalletRecovery) ...[
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -291,7 +395,7 @@ class _SendScreenState extends State<SendScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: ElevatedButton(
-                onPressed: _handleSend,
+                onPressed: _needsWalletRecovery ? null : _handleSend,
                 child: const Text('Confirm & Send'),
               ),
             ),
