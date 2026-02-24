@@ -13,7 +13,7 @@ import { generateInvoicePdf } from "@/lib/generate-pdf";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ||
-  "https://cashtap-api-production.up.railway.app";
+  "https://bch-pay-api-production.up.railway.app";
 
 interface ApiInvoice {
   id: string;

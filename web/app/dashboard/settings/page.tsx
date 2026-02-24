@@ -38,7 +38,7 @@ export default function SettingsPage() {
   const [bchAddress, setBchAddress] = useState("");
   const [webhookUrl, setWebhookUrl] = useState("");
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://cashtap-api-production.up.railway.app";
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
 
   const fetchProfile = useCallback(async () => {
     try {

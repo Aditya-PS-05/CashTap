@@ -21,6 +21,7 @@ export default function AuthPage() {
   const [seedPhrase, setSeedPhrase] = useState("");
   const [generatedSeed, setGeneratedSeed] = useState("");
   const [seedCopied, setSeedCopied] = useState(false);
+  const [loginDone, setLoginDone] = useState(false);
 
   const paytacaAvailable = typeof window !== "undefined" && isPaytacaAvailable();
 
@@ -40,19 +41,22 @@ export default function AuthPage() {
 
   const handleCreateWallet = async () => {
     setLoading(true);
+    setLoginDone(false);
     try {
       const wallet = createWallet();
       setGeneratedSeed(wallet.mnemonic);
       setMode("show-seed");
 
-      // Store keys in memory for the sign function
+      // Authenticate in the background while user sees the seed
       const signFn = async (message: string) => {
         return signMessage(wallet.privateKey, message);
       };
       await login(wallet.address, signFn);
-      toast.success("Wallet created!");
+      setLoginDone(true);
+      toast.success("Wallet created & authenticated!");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create wallet");
+      setMode("choose");
     } finally {
       setLoading(false);
     }
@@ -160,13 +164,19 @@ export default function AuthPage() {
                   <p className="text-sm font-mono leading-relaxed break-words">{generatedSeed}</p>
                 </div>
               </div>
+              {loading && (
+                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Authenticating...
+                </div>
+              )}
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1 gap-2" onClick={copySeed}>
                   {seedCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
                   {seedCopied ? "Copied" : "Copy"}
                 </Button>
-                <Button className="flex-1 gap-2" onClick={handleSeedContinue}>
-                  Continue <ArrowRight className="h-4 w-4" />
+                <Button className="flex-1 gap-2" onClick={handleSeedContinue} disabled={!loginDone}>
+                  {loginDone ? "Continue" : "Waiting..."} <ArrowRight className="h-4 w-4" />
                 </Button>
               </div>
             </div>

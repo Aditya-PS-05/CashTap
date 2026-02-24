@@ -8,11 +8,12 @@ import { Input } from "@/components/ui/input";
 import { ArrowRight } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://cashtap-api-production.up.railway.app";
+import { useAuth } from "@/lib/auth-context";
+import { apiFetch } from "@/lib/api";
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { address } = useAuth();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -25,21 +26,41 @@ export default function OnboardingPage() {
       return;
     }
 
+    const profileBody = JSON.stringify({
+      bch_address: address,
+      business_name: name.trim(),
+      email: email.trim() || undefined,
+      logo_url: logoUrl.trim() || undefined,
+    });
+
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/merchants`, {
+      await apiFetch("/api/merchants", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ name: name.trim(), email: email.trim() || undefined, logoUrl: logoUrl.trim() || undefined }),
+        body: profileBody,
       });
-
-      if (!res.ok) throw new Error("Failed to create merchant profile");
 
       toast.success("Welcome to CashTap!");
       router.push("/dashboard?tour=true");
-    } catch {
-      toast.error("Failed to create profile. Please try again.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("already exists")) {
+        // Merchant was auto-created during auth — update with business name
+        try {
+          await apiFetch("/api/merchants/me", {
+            method: "PUT",
+            body: profileBody,
+          });
+          toast.success("Welcome to CashTap!");
+          router.push("/dashboard?tour=true");
+        } catch {
+          // PUT failed — still let them through
+          toast.success("Welcome back!");
+          router.push("/dashboard");
+        }
+      } else {
+        toast.error("Failed to create profile. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

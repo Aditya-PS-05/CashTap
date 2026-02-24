@@ -20,7 +20,7 @@ interface PriceContextType extends PriceState {
 
 const PriceContext = createContext<PriceContextType | null>(null);
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://cashtap-api-production.up.railway.app";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
 const REFRESH_INTERVAL = 60_000; // 60 seconds
 
 export function PriceProvider({ children }: { children: ReactNode }) {

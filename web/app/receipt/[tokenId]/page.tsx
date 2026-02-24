@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink, Zap, Loader2, Receipt } from "lucide-react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://cashtap-api-production.up.railway.app";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
 const EXPLORER_BASE = "https://chipnet.chaingraph.cash/tx/";
 
 interface ReceiptData {
