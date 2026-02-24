@@ -179,14 +179,7 @@ wallet.post("/broadcast", async (c) => {
   }
 
   try {
-    const { ElectrumNetworkProvider, Network } = await import("mainnet-js");
-    const network =
-      (process.env.BCH_NETWORK || "chipnet") === "mainnet"
-        ? Network.MAINNET
-        : Network.TESTNET;
-    const provider = new ElectrumNetworkProvider(network as any);
-    const txId = await provider.sendRawTransaction(parsed.data.raw_tx);
-
+    const txId = await walletService.broadcastRawTransaction(parsed.data.raw_tx);
     return c.json({ txid: txId });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

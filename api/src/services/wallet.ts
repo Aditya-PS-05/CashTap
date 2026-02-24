@@ -5,6 +5,8 @@ import {
   TestNetWatchWallet,
   SendRequest,
   TokenSendRequest,
+  ElectrumNetworkProvider,
+  Network,
 } from "mainnet-js";
 import type { Utxo } from "mainnet-js";
 import { prisma } from "../lib/prisma.js";
@@ -558,6 +560,32 @@ class WalletService {
         error instanceof Error ? error.message : "Unknown error";
       console.error(`[WalletService] getTokenUtxos failed: ${message}`);
       return [];
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Raw transaction broadcast
+  // -------------------------------------------------------------------------
+
+  /**
+   * Broadcast a raw signed transaction hex to the network.
+   *
+   * @param rawTxHex  The fully-signed raw transaction in hex format.
+   * @returns         The transaction ID.
+   */
+  async broadcastRawTransaction(rawTxHex: string): Promise<string> {
+    try {
+      const network =
+        NETWORK === "mainnet" ? Network.MAINNET : Network.TESTNET;
+      const provider = new ElectrumNetworkProvider(network as any);
+      const txId = await provider.sendRawTransaction(rawTxHex);
+      console.log(`[WalletService] Broadcast tx: ${txId}`);
+      return txId;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown error";
+      console.error(`[WalletService] broadcastRawTransaction failed: ${message}`);
+      throw new Error(`Broadcast failed: ${message}`);
     }
   }
 
