@@ -2,10 +2,10 @@ class Merchant {
   final String id;
   final String businessName;
   final String email;
-  final String walletAddress;
-  final bool zeroConfEnabled;
-  final double minimumAmount;
-  final String? avatarUrl;
+  final String bchAddress;
+  final String? logoUrl;
+  final String? webhookUrl;
+  final String displayCurrency;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -13,10 +13,10 @@ class Merchant {
     required this.id,
     required this.businessName,
     required this.email,
-    required this.walletAddress,
-    this.zeroConfEnabled = true,
-    this.minimumAmount = 0.0001,
-    this.avatarUrl,
+    required this.bchAddress,
+    this.logoUrl,
+    this.webhookUrl,
+    this.displayCurrency = 'BCH',
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : createdAt = createdAt ?? DateTime.now(),
@@ -27,10 +27,10 @@ class Merchant {
       id: json['id'] as String? ?? '',
       businessName: json['business_name'] as String? ?? '',
       email: json['email'] as String? ?? '',
-      walletAddress: json['wallet_address'] as String? ?? '',
-      zeroConfEnabled: json['zero_conf_enabled'] as bool? ?? true,
-      minimumAmount: (json['minimum_amount'] as num?)?.toDouble() ?? 0.0001,
-      avatarUrl: json['avatar_url'] as String?,
+      bchAddress: json['bch_address'] as String? ?? '',
+      logoUrl: json['logo_url'] as String?,
+      webhookUrl: json['webhook_url'] as String?,
+      displayCurrency: json['display_currency'] as String? ?? 'BCH',
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
           : DateTime.now(),
@@ -45,10 +45,10 @@ class Merchant {
       'id': id,
       'business_name': businessName,
       'email': email,
-      'wallet_address': walletAddress,
-      'zero_conf_enabled': zeroConfEnabled,
-      'minimum_amount': minimumAmount,
-      'avatar_url': avatarUrl,
+      'bch_address': bchAddress,
+      'logo_url': logoUrl,
+      'webhook_url': webhookUrl,
+      'display_currency': displayCurrency,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
@@ -58,10 +58,10 @@ class Merchant {
     String? id,
     String? businessName,
     String? email,
-    String? walletAddress,
-    bool? zeroConfEnabled,
-    double? minimumAmount,
-    String? avatarUrl,
+    String? bchAddress,
+    String? logoUrl,
+    String? webhookUrl,
+    String? displayCurrency,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -69,10 +69,10 @@ class Merchant {
       id: id ?? this.id,
       businessName: businessName ?? this.businessName,
       email: email ?? this.email,
-      walletAddress: walletAddress ?? this.walletAddress,
-      zeroConfEnabled: zeroConfEnabled ?? this.zeroConfEnabled,
-      minimumAmount: minimumAmount ?? this.minimumAmount,
-      avatarUrl: avatarUrl ?? this.avatarUrl,
+      bchAddress: bchAddress ?? this.bchAddress,
+      logoUrl: logoUrl ?? this.logoUrl,
+      webhookUrl: webhookUrl ?? this.webhookUrl,
+      displayCurrency: displayCurrency ?? this.displayCurrency,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

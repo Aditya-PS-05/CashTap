@@ -149,18 +149,31 @@ class Transaction {
   }) : createdAt = createdAt ?? DateTime.now();
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
+    // API returns amount_satoshis (BigInt string) — compute BCH and USD
+    final amountSats =
+        int.tryParse(json['amount_satoshis']?.toString() ?? '0') ?? 0;
+    final computedBch = amountSats / 100000000.0;
+    final usdRate = (json['usd_rate_at_time'] as num?)?.toDouble();
+    final computedUsd = usdRate != null ? computedBch * usdRate : 0.0;
+
+    // Memo comes from nested payment_link if present
+    final paymentLink = json['payment_link'] as Map<String, dynamic>?;
+    final memo = json['memo'] as String? ??
+        paymentLink?['memo'] as String? ??
+        '';
+
     return Transaction(
       id: json['id'] as String? ?? '',
       txHash: json['tx_hash'] as String? ?? '',
       merchantId: json['merchant_id'] as String? ?? '',
-      amountBch: (json['amount_bch'] as num?)?.toDouble() ?? 0.0,
-      amountUsd: (json['amount_usd'] as num?)?.toDouble() ?? 0.0,
+      amountBch: (json['amount_bch'] as num?)?.toDouble() ?? computedBch,
+      amountUsd: (json['amount_usd'] as num?)?.toDouble() ?? computedUsd,
       senderAddress: json['sender_address'] as String? ?? '',
       recipientAddress: json['recipient_address'] as String? ?? '',
       status: TransactionStatus.fromString(json['status'] as String? ?? 'pending'),
       type: TransactionType.fromString(json['type'] as String? ?? 'incoming'),
       confirmations: json['confirmations'] as int? ?? 0,
-      memo: json['memo'] as String? ?? '',
+      memo: memo,
       paymentLinkId: json['payment_link_id'] as String?,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)

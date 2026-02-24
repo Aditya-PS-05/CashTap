@@ -85,7 +85,7 @@ class ApiService {
     final response = await _dio.post('/api/merchants', data: {
       'business_name': businessName,
       'email': email,
-      'wallet_address': walletAddress,
+      'bch_address': walletAddress,
     });
     final data = response.data as Map<String, dynamic>;
     final merchant = data['merchant'] as Map<String, dynamic>? ?? data;

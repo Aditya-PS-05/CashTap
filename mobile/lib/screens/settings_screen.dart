@@ -193,7 +193,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final wallet = context.watch<WalletProvider>();
     final merchant = auth.currentMerchant;
 
-    _zeroConfEnabled = merchant?.zeroConfEnabled ?? true;
+    // zeroConfEnabled is a client-side preference, not from API
 
     return SafeArea(
       child: SingleChildScrollView(

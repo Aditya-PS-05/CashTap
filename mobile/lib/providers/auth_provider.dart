@@ -194,7 +194,8 @@ class AuthProvider extends ChangeNotifier {
     return true;
   }
 
-  /// Complete onboarding with merchant profile
+  /// Complete onboarding with merchant profile.
+  /// Tries POST first; if 409 (merchant auto-created during auth), falls back to PUT.
   Future<bool> completeOnboarding({
     required String businessName,
     required String email,
@@ -209,23 +210,38 @@ class AuthProvider extends ChangeNotifier {
         email: email,
         walletAddress: _walletAddress ?? '',
       );
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(AppConstants.onboardedKey, true);
-
-      _isOnboarded = true;
-
-      _isLoading = false;
-      notifyListeners();
-      return true;
     } catch (e) {
-      _errorMessage = 'Error completing onboarding: $e';
-      debugPrint(_errorMessage);
+      final msg = e.toString();
+      if (msg.contains('409') || msg.contains('already exists')) {
+        // Merchant was auto-created during auth — update with business name
+        try {
+          _currentMerchant = await _apiService.updateMerchant({
+            'business_name': businessName,
+            'email': email,
+          });
+        } catch (e2) {
+          _errorMessage = 'Error updating profile: $e2';
+          debugPrint(_errorMessage);
+          _isLoading = false;
+          notifyListeners();
+          return false;
+        }
+      } else {
+        _errorMessage = 'Error completing onboarding: $e';
+        debugPrint(_errorMessage);
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
     }
 
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(AppConstants.onboardedKey, true);
+
+    _isOnboarded = true;
     _isLoading = false;
     notifyListeners();
-    return false;
+    return true;
   }
 
   /// Update merchant profile
