@@ -24,7 +24,7 @@ interface Notification {
 }
 
 export function Header() {
-  const { address, merchant, logout } = useAuth();
+  const { address, user, logout } = useAuth();
   const { bchUsd, loading: priceLoading } = usePrice();
   const router = useRouter();
   const bchPrice = priceLoading ? 0 : bchUsd;
@@ -47,7 +47,7 @@ export function Header() {
         const session = await sessionRes.json();
         if (!session.accessToken) return;
 
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3456";
         es = new EventSource(`${apiBase}/api/events?token=${session.accessToken}`);
         eventSourceRef.current = es;
 
@@ -116,8 +116,8 @@ export function Header() {
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex items-center gap-4">
-        {merchant?.name && (
-          <span className="text-sm font-medium">{merchant.name}</span>
+        {(user?.business_name || user?.email) && (
+          <span className="text-sm font-medium">{user.business_name || user.email}</span>
         )}
         <Badge variant="outline" className="font-mono text-xs">
           {priceLoading ? "Loading..." : `1 BCH = $${bchPrice.toFixed(2)}`}

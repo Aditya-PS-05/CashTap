@@ -24,7 +24,7 @@ import {
 import { toast } from "sonner";
 import { usePrice } from "@/lib/price-context";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3456";
 
 interface ContractInstance {
   id: string;

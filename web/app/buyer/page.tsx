@@ -27,7 +27,7 @@ interface TxRecord {
   recipient_address: string;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3456";
 
 export default function BuyerPage() {
   const { address } = useAuth();

@@ -68,7 +68,7 @@ const statusVariant = {
 };
 
 export default function DashboardPage() {
-  const { merchant } = useAuth();
+  const { user } = useAuth();
   const { formatUsd } = usePrice();
   const [stats, setStats] = useState<StatsData | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
@@ -111,7 +111,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-3xl font-bold">Dashboard</h1>
           <p className="text-muted-foreground">
-            Welcome back, {merchant?.name || "Merchant"}
+            Welcome back, {user?.business_name || user?.email || "Merchant"}
           </p>
         </div>
         <div className="flex gap-2">

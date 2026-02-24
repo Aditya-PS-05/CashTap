@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
+import '../services/api_service.dart';
 import '../services/bch_service.dart';
 
 class ScanScreen extends StatefulWidget {
@@ -33,6 +34,10 @@ class _ScanScreenState extends State<ScanScreen> {
     super.dispose();
   }
 
+  /// Regex to extract a payment link slug from a CashTap URL.
+  static final _paymentLinkPattern =
+      RegExp(r'https?://[^/]+/pay/([A-Za-z0-9_-]+)');
+
   void _onBarcodeDetect(BarcodeCapture capture) {
     if (_hasScanned) return;
 
@@ -41,14 +46,60 @@ class _ScanScreenState extends State<ScanScreen> {
 
     final value = barcode.rawValue!;
 
-    // Check if it's a BCH address or payment URI
+    // 1. Direct BCH address or BIP21 URI
     if (value.startsWith('bitcoincash:') ||
         value.startsWith('bchtest:') ||
         BchService.isValidBchAddress(value)) {
       setState(() => _hasScanned = true);
       HapticFeedback.mediumImpact();
       _showScannedResult(value);
+      return;
     }
+
+    // 2. CashTap payment link URL (e.g. https://cashtap.app/pay/SLUG)
+    final match = _paymentLinkPattern.firstMatch(value);
+    if (match != null) {
+      final slug = match.group(1)!;
+      setState(() => _hasScanned = true);
+      HapticFeedback.mediumImpact();
+      _resolvePaymentLink(slug);
+    }
+  }
+
+  /// Fetch payment link details by slug and show the payment sheet.
+  Future<void> _resolvePaymentLink(String slug) async {
+    try {
+      final pl = await ApiService().getPaymentLinkStatus(slug);
+
+      if (!mounted) return;
+
+      if (pl.paymentAddress.isEmpty) {
+        _showSnackBar('Payment link has no address');
+        setState(() => _hasScanned = false);
+        return;
+      }
+
+      // Build a BIP21-style URI so _showScannedResult can parse it normally
+      final uri = StringBuffer('bchtest:${pl.paymentAddress}');
+      final params = <String>[];
+      if (pl.amountBch > 0) params.add('amount=${pl.amountBch}');
+      if (pl.memo.isNotEmpty) {
+        params.add('message=${Uri.encodeComponent(pl.memo)}');
+      }
+      if (params.isNotEmpty) uri.write('?${params.join('&')}');
+
+      _showScannedResult(uri.toString());
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('Failed to load payment link');
+      setState(() => _hasScanned = false);
+    }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+    );
   }
 
   Future<void> _onGalleryPressed() async {
@@ -116,15 +167,26 @@ class _ScanScreenState extends State<ScanScreen> {
         HapticFeedback.mediumImpact();
         _showScannedResult(value);
       } else {
-        setState(() {
-          _isPickingImage = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('QR code does not contain a valid BCH address'),
-            duration: Duration(seconds: 2),
-          ),
-        );
+        // Check for CashTap payment link URL
+        final match = _paymentLinkPattern.firstMatch(value);
+        if (match != null) {
+          setState(() {
+            _hasScanned = true;
+            _isPickingImage = false;
+          });
+          HapticFeedback.mediumImpact();
+          _resolvePaymentLink(match.group(1)!);
+        } else {
+          setState(() {
+            _isPickingImage = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('QR code does not contain a valid BCH address'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {

@@ -161,7 +161,7 @@ export function isValidMnemonic(mnemonic: string): boolean {
 // Transaction builder — build, sign and broadcast a BCH transaction
 // ---------------------------------------------------------------------------
 
-const API_BASE_WALLET = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
+const API_BASE_WALLET = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3456";
 
 interface BuildTxParams {
   senderAddress: string;

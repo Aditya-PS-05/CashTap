@@ -58,7 +58,7 @@ export default function SettingsPage() {
   const [encryptedWallet, setEncryptedWallet] = useState<string | null>(null);
 
   const isMerchant = role === "MERCHANT";
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3456";
 
   const fetchProfile = useCallback(async () => {
     try {

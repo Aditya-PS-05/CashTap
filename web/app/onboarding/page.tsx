@@ -69,7 +69,7 @@ export default function OnboardingPage() {
       if (!sessionRes.ok) throw new Error("No session");
       const session = await sessionRes.json();
 
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3456";
 
       // Register wallet address + encrypted blob with API
       const res = await fetch(`${API_BASE}/api/wallet/register`, {

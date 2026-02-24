@@ -10,7 +10,7 @@ import { Copy, Check, ExternalLink, Loader2, X } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://bch-pay-api-production.up.railway.app";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3456";
 
 type SessionStatus = "loading" | "awaiting" | "detected" | "confirmed" | "expired" | "error";
 

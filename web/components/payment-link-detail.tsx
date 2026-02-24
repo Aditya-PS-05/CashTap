@@ -49,7 +49,9 @@ export function PaymentLinkDetail({
 
   if (!link) return null;
 
-  const paymentUrl = `https://cashtap.app/pay/${link.slug}`;
+  const appBase = process.env.NEXT_PUBLIC_APP_URL
+    || (process.env.NEXT_PUBLIC_VERCEL_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` : "http://localhost:3000");
+  const paymentUrl = `${appBase}/pay/${link.slug}`;
 
   const copyUrl = () => {
     navigator.clipboard.writeText(paymentUrl);
