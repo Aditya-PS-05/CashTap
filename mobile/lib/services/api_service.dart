@@ -279,6 +279,23 @@ class ApiService {
     return data['txid'] as String;
   }
 
+  /// Record a transaction in the database after broadcasting.
+  Future<void> recordTransaction({
+    required String txHash,
+    required String senderAddress,
+    required String recipientAddress,
+    required int amountSatoshis,
+    String? paymentLinkId,
+  }) async {
+    await _dio.post('/api/transactions', data: {
+      'tx_hash': txHash,
+      'sender_address': senderAddress,
+      'recipient_address': recipientAddress,
+      'amount_satoshis': amountSatoshis,
+      ?'payment_link_id': paymentLinkId,
+    });
+  }
+
   Future<Map<String, dynamic>> getWalletBalance() async {
     final response = await _dio.get('/api/transactions/stats');
     final data = response.data as Map<String, dynamic>;

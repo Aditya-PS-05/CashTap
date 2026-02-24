@@ -87,6 +87,19 @@ class TransactionBuilder {
       _bytesToHex(rawTx),
       senderAddress: senderAddress,
     );
+
+    // Record transaction in the database
+    try {
+      await api.recordTransaction(
+        txHash: txid,
+        senderAddress: senderAddress,
+        recipientAddress: recipientAddress,
+        amountSatoshis: amountSatoshis,
+      );
+    } catch (_) {
+      // Don't fail the send if recording fails — tx is already on-chain
+    }
+
     return txid;
   }
 

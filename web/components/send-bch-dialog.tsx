@@ -97,6 +97,29 @@ export function SendBchDialog({ open, onOpenChange, onSuccess, prefillAddress, p
       setTxid(result.txid);
       setStep("done");
       toast.success("BCH sent successfully!");
+
+      // Record transaction in the database
+      try {
+        const sessionRes = await fetch("/api/auth/session", { credentials: "include" });
+        const session = await sessionRes.json();
+        const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3456";
+        await fetch(`${API_BASE}/api/transactions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.accessToken}`,
+          },
+          body: JSON.stringify({
+            tx_hash: result.txid,
+            sender_address: address,
+            recipient_address: recipient,
+            amount_satoshis: amountSatoshis,
+          }),
+        });
+      } catch {
+        // Don't fail the UI if recording fails — tx is already on-chain
+      }
+
       onSuccess?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Transaction failed");

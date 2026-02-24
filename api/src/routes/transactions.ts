@@ -385,4 +385,59 @@ function serializeTransaction(tx: Record<string, unknown>) {
   return serialized;
 }
 
+// --- Create transaction record ---
+
+const createTransactionSchema = z.object({
+  tx_hash: z.string().min(1, "Transaction hash is required"),
+  sender_address: z.string().min(1, "Sender address is required"),
+  recipient_address: z.string().min(1, "Recipient address is required"),
+  amount_satoshis: z.coerce.number().int().positive("Amount must be positive"),
+  payment_link_id: z.string().optional(),
+  invoice_id: z.string().optional(),
+  usd_rate_at_time: z.number().optional(),
+});
+
+/**
+ * POST /api/transactions
+ * Record a new transaction after broadcasting.
+ */
+transactions.post("/", authMiddleware, async (c) => {
+  const merchantId = c.get("merchantId") as string;
+  const body = await c.req.json();
+  const parsed = createTransactionSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return c.json(
+      { error: "Validation failed", details: parsed.error.flatten() },
+      400
+    );
+  }
+
+  const { tx_hash, sender_address, recipient_address, amount_satoshis, payment_link_id, invoice_id, usd_rate_at_time } = parsed.data;
+
+  // Prevent duplicate records
+  const existing = await prisma.transaction.findUnique({
+    where: { tx_hash },
+  });
+  if (existing) {
+    return c.json({ transaction: serializeTransaction(existing) });
+  }
+
+  const transaction = await prisma.transaction.create({
+    data: {
+      tx_hash,
+      merchant_id: merchantId,
+      sender_address,
+      recipient_address,
+      amount_satoshis: BigInt(amount_satoshis),
+      payment_link_id: payment_link_id || null,
+      invoice_id: invoice_id || null,
+      usd_rate_at_time: usd_rate_at_time ?? null,
+      status: "PENDING",
+    },
+  });
+
+  return c.json({ transaction: serializeTransaction(transaction) }, 201);
+});
+
 export default transactions;
