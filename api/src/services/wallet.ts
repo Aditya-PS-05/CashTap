@@ -571,15 +571,27 @@ class WalletService {
    * @param rawTxHex  The fully-signed raw transaction in hex format.
    * @returns         The transaction ID.
    */
-  async broadcastRawTransaction(rawTxHex: string): Promise<string> {
+  async broadcastRawTransaction(
+    rawTxHex: string,
+    senderAddress?: string
+  ): Promise<string> {
     try {
-      // Use a watch wallet to get a working Electrum connection
-      // (ElectrumNetworkProvider has a broken .connect() in this version)
-      const dummyAddr =
-        NETWORK === "mainnet"
-          ? "bitcoincash:qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs7ratqfx"
-          : "bchtest:qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs9wsasth";
-      const watchWallet = await WatchWalletClass.watchOnly(dummyAddr);
+      // Use masterWallet if initialized, otherwise create a watch wallet
+      // (ElectrumNetworkProvider.connect() is broken in this mainnet-js version,
+      //  but wallet instances get working Electrum connections)
+      if (this.masterWallet) {
+        const txId = await this.masterWallet.submitTransaction(
+          Uint8Array.from(Buffer.from(rawTxHex, "hex"))
+        );
+        console.log(`[WalletService] Broadcast tx: ${txId}`);
+        return txId;
+      }
+
+      if (!senderAddress) {
+        throw new Error("No wallet available for broadcasting — provide sender_address");
+      }
+
+      const watchWallet = await WatchWalletClass.watchOnly(senderAddress);
       const txId = await watchWallet.submitTransaction(
         Uint8Array.from(Buffer.from(rawTxHex, "hex"))
       );

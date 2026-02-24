@@ -267,10 +267,14 @@ class ApiService {
   }
 
   /// Broadcast a raw transaction.
-  Future<String> broadcastTransaction(String rawTxHex) async {
-    final response = await _dio.post('/api/wallet/broadcast', data: {
+  Future<String> broadcastTransaction(String rawTxHex, {String? senderAddress}) async {
+    final body = <String, dynamic>{
       'raw_tx': rawTxHex,
-    });
+    };
+    if (senderAddress != null) {
+      body['sender_address'] = senderAddress;
+    }
+    final response = await _dio.post('/api/wallet/broadcast', data: body);
     final data = response.data as Map<String, dynamic>;
     return data['txid'] as String;
   }

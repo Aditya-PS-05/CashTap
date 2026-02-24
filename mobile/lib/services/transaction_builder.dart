@@ -83,7 +83,10 @@ class TransactionBuilder {
     );
 
     // Broadcast
-    final txid = await api.broadcastTransaction(_bytesToHex(rawTx));
+    final txid = await api.broadcastTransaction(
+      _bytesToHex(rawTx),
+      senderAddress: senderAddress,
+    );
     return txid;
   }
 

@@ -19,6 +19,10 @@ const addressSchema = z.object({
 
 const broadcastSchema = z.object({
   raw_tx: z.string().min(1, "Raw transaction hex is required"),
+  sender_address: z
+    .string()
+    .regex(/^(bitcoincash:|bchtest:)?[qpzrs][a-z0-9]{41,}$/i)
+    .optional(),
 });
 
 const registerWalletSchema = z.object({
@@ -179,7 +183,10 @@ wallet.post("/broadcast", async (c) => {
   }
 
   try {
-    const txId = await walletService.broadcastRawTransaction(parsed.data.raw_tx);
+    const txId = await walletService.broadcastRawTransaction(
+      parsed.data.raw_tx,
+      parsed.data.sender_address
+    );
     return c.json({ txid: txId });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
