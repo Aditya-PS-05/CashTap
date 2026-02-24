@@ -573,13 +573,16 @@ class WalletService {
    */
   async broadcastRawTransaction(rawTxHex: string): Promise<string> {
     try {
-      const mainnet = await import("mainnet-js");
-      const network =
+      // Use a watch wallet to get a working Electrum connection
+      // (ElectrumNetworkProvider has a broken .connect() in this version)
+      const dummyAddr =
         NETWORK === "mainnet"
-          ? mainnet.Network.MAINNET
-          : mainnet.Network.TESTNET;
-      const provider = new mainnet.ElectrumNetworkProvider(network as any);
-      const txId = await provider.sendRawTransaction(rawTxHex);
+          ? "bitcoincash:qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs7ratqfx"
+          : "bchtest:qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqs9wsasth";
+      const watchWallet = await WatchWalletClass.watchOnly(dummyAddr);
+      const txId = await watchWallet.submitTransaction(
+        Uint8Array.from(Buffer.from(rawTxHex, "hex"))
+      );
       console.log(`[WalletService] Broadcast tx: ${txId}`);
       return txId;
     } catch (error) {
