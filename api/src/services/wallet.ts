@@ -5,8 +5,6 @@ import {
   TestNetWatchWallet,
   SendRequest,
   TokenSendRequest,
-  ElectrumNetworkProvider,
-  Network,
 } from "mainnet-js";
 import type { Utxo } from "mainnet-js";
 import { prisma } from "../lib/prisma.js";
@@ -575,9 +573,12 @@ class WalletService {
    */
   async broadcastRawTransaction(rawTxHex: string): Promise<string> {
     try {
+      const mainnet = await import("mainnet-js");
       const network =
-        NETWORK === "mainnet" ? Network.MAINNET : Network.TESTNET;
-      const provider = new ElectrumNetworkProvider(network as any);
+        NETWORK === "mainnet"
+          ? mainnet.Network.MAINNET
+          : mainnet.Network.TESTNET;
+      const provider = new mainnet.ElectrumNetworkProvider(network as any);
       const txId = await provider.sendRawTransaction(rawTxHex);
       console.log(`[WalletService] Broadcast tx: ${txId}`);
       return txId;
