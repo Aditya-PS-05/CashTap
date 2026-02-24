@@ -45,8 +45,59 @@ class ApiService {
 
   // ---- Auth ----
 
-  /// Request a challenge nonce for the given BCH address.
-  /// Returns { nonce, message, expires_in }.
+  /// Register with email + password.
+  /// Returns { access_token, refresh_token, user }.
+  Future<Map<String, dynamic>> register({
+    required String email,
+    required String password,
+  }) async {
+    final response = await _dio.post('/api/auth/register', data: {
+      'email': email,
+      'password': password,
+    });
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Login with email + password.
+  /// Returns { access_token, refresh_token, user }.
+  Future<Map<String, dynamic>> login({
+    required String email,
+    required String password,
+  }) async {
+    final response = await _dio.post('/api/auth/login', data: {
+      'email': email,
+      'password': password,
+    });
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Register a wallet address for the authenticated user.
+  Future<Map<String, dynamic>> registerWallet({
+    required String bchAddress,
+  }) async {
+    final response = await _dio.post('/api/wallet/register', data: {
+      'bch_address': bchAddress,
+    });
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Upgrade the authenticated user to a merchant.
+  Future<Map<String, dynamic>> setupMerchant({
+    required String businessName,
+    String? merchantAddress,
+    String? logoUrl,
+  }) async {
+    final data = <String, dynamic>{
+      'business_name': businessName,
+    };
+    if (merchantAddress != null) data['merchant_address'] = merchantAddress;
+    if (logoUrl != null) data['logo_url'] = logoUrl;
+
+    final response = await _dio.post('/api/merchants/setup', data: data);
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Request a challenge nonce for the given BCH address (legacy).
   Future<Map<String, dynamic>> requestChallenge(String address) async {
     final response = await _dio.post('/api/auth/challenge', data: {
       'address': address,
@@ -54,8 +105,7 @@ class ApiService {
     return response.data as Map<String, dynamic>;
   }
 
-  /// Verify a signed challenge and obtain JWT tokens.
-  /// Returns { access_token, refresh_token, token_type, expires_in, merchant }.
+  /// Verify a signed challenge and obtain JWT tokens (legacy).
   Future<Map<String, dynamic>> verifyChallenge({
     required String address,
     required String signature,
@@ -182,7 +232,43 @@ class ApiService {
     return Transaction.fromJson(tx);
   }
 
+  // ---- Role ----
+
+  Future<Map<String, dynamic>> switchRole(String role) async {
+    final response = await _dio.patch('/api/merchants/me/role', data: {
+      'role': role,
+    });
+    return response.data as Map<String, dynamic>;
+  }
+
   // ---- Wallet ----
+
+  /// Get UTXOs for an address.
+  Future<List<Map<String, dynamic>>> getUtxos(String address) async {
+    final response = await _dio.get('/api/wallet/utxos', queryParameters: {
+      'address': address,
+    });
+    final data = response.data as Map<String, dynamic>;
+    final utxos = data['utxos'] as List<dynamic>? ?? [];
+    return utxos.cast<Map<String, dynamic>>();
+  }
+
+  /// Get balance for an address.
+  Future<Map<String, dynamic>> getAddressBalance(String address) async {
+    final response = await _dio.get('/api/wallet/balance', queryParameters: {
+      'address': address,
+    });
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Broadcast a raw transaction.
+  Future<String> broadcastTransaction(String rawTxHex) async {
+    final response = await _dio.post('/api/wallet/broadcast', data: {
+      'raw_tx': rawTxHex,
+    });
+    final data = response.data as Map<String, dynamic>;
+    return data['txid'] as String;
+  }
 
   Future<Map<String, dynamic>> getWalletBalance() async {
     final response = await _dio.get('/api/transactions/stats');

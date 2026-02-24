@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma.js";
 import { signToken, signRefreshToken, verifyToken } from "../middleware/auth.js";
 import {
@@ -94,6 +95,16 @@ setInterval(() => {
 
 // --- Schemas ---
 
+const registerSchema = z.object({
+  email: z.string().email("Valid email is required"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
+
+const loginSchema = z.object({
+  email: z.string().email("Valid email is required"),
+  password: z.string().min(1, "Password is required"),
+});
+
 const challengeSchema = z.object({
   address: z
     .string()
@@ -108,6 +119,7 @@ const verifySchema = z.object({
   address: z.string().min(1),
   signature: z.string().min(1, "Signature is required"),
   nonce: z.string().min(1, "Nonce is required"),
+  role: z.enum(["MERCHANT", "BUYER"]).optional(),
 });
 
 const refreshSchema = z.object({
@@ -118,9 +130,6 @@ const refreshSchema = z.object({
 
 /**
  * Verify a Bitcoin Signed Message signature against a BCH CashAddr address.
- *
- * Format: double-sha256("\x18Bitcoin Signed Message:\n" + varint(len) + message)
- * Signature: 65-byte recoverable compact (recovery_id + r + s)
  */
 function verifyBchSignature(
   address: string,
@@ -128,23 +137,18 @@ function verifyBchSignature(
   signatureBase64: string
 ): boolean {
   try {
-    // Decode the base64 signature (65 bytes: 1 recovery_flag + 32 r + 32 s)
     const sigBytes = Buffer.from(signatureBase64, "base64");
     if (sigBytes.length !== 65) return false;
 
     const recoveryFlag = sigBytes[0];
-    const compactSig = sigBytes.slice(1); // 64 bytes: r + s
+    const compactSig = sigBytes.slice(1);
 
-    // Extract recovery ID from flag byte
-    // Flag = 27 + recoveryId + (compressed ? 4 : 0)
     const recoveryId = ((recoveryFlag - 27) & 3) as 0 | 1 | 2 | 3;
 
-    // Build the message hash (Bitcoin Signed Message format)
     const prefix = "\x18Bitcoin Signed Message:\n";
     const msgBytes = new TextEncoder().encode(message);
     const prefixBytes = new TextEncoder().encode(prefix);
 
-    // Varint encoding for message length (simplified — up to 252 bytes)
     const lenByte = new Uint8Array([msgBytes.length & 0xff]);
 
     const fullMsg = new Uint8Array(prefixBytes.length + lenByte.length + msgBytes.length);
@@ -155,19 +159,14 @@ function verifyBchSignature(
     const hash1 = sha256.hash(fullMsg);
     const messageHash = sha256.hash(hash1);
 
-    // Recover the public key from the signature
     const recovered = secp256k1.recoverPublicKeyCompressed(
       compactSig,
       recoveryId,
       messageHash
     );
 
-    if (typeof recovered === "string") {
-      // Recovery failed — returned error message
-      return false;
-    }
+    if (typeof recovered === "string") return false;
 
-    // Verify the signature is valid for this public key
     const valid = secp256k1.verifySignatureCompact(
       compactSig,
       recovered,
@@ -176,15 +175,12 @@ function verifyBchSignature(
 
     if (!valid) return false;
 
-    // Derive the address from the recovered public key and compare
     const pubKeyHash = hash160(recovered);
     if (typeof pubKeyHash === "string") return false;
 
-    // Decode the provided address to get its payload
     const decoded = decodeCashAddress(address);
     if (typeof decoded === "string") return false;
 
-    // Compare the hash160 of the recovered public key with the address payload
     const addrPayload = decoded.payload;
     if (addrPayload.length !== pubKeyHash.length) return false;
 
@@ -199,6 +195,109 @@ function verifyBchSignature(
 }
 
 // --- Routes ---
+
+/**
+ * POST /api/auth/register
+ * Register with email + password. Creates user with role=BUYER.
+ */
+auth.post("/register", async (c) => {
+  const body = await c.req.json();
+  const parsed = registerSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return c.json(
+      { error: "Validation failed", details: parsed.error.flatten() },
+      400
+    );
+  }
+
+  const { email, password } = parsed.data;
+
+  // Check if email already exists
+  const existing = await prisma.merchant.findUnique({
+    where: { email: email.toLowerCase() },
+  });
+
+  if (existing) {
+    return c.json({ error: "An account with this email already exists" }, 409);
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  const merchant = await prisma.merchant.create({
+    data: {
+      email: email.toLowerCase(),
+      password_hash: passwordHash,
+      role: "BUYER",
+    },
+  });
+
+  const accessToken = signToken(merchant.id, merchant.email, merchant.role);
+  const refreshToken = signRefreshToken(merchant.id, merchant.email, merchant.role);
+
+  return c.json({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    token_type: "Bearer",
+    expires_in: 86400,
+    user: {
+      id: merchant.id,
+      email: merchant.email,
+      role: merchant.role,
+      bch_address: merchant.bch_address,
+    },
+  }, 201);
+});
+
+/**
+ * POST /api/auth/login
+ * Login with email + password.
+ */
+auth.post("/login", async (c) => {
+  const body = await c.req.json();
+  const parsed = loginSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return c.json(
+      { error: "Validation failed", details: parsed.error.flatten() },
+      400
+    );
+  }
+
+  const { email, password } = parsed.data;
+
+  const merchant = await prisma.merchant.findUnique({
+    where: { email: email.toLowerCase() },
+  });
+
+  if (!merchant || !merchant.password_hash) {
+    return c.json({ error: "Invalid credentials" }, 401);
+  }
+
+  const valid = await bcrypt.compare(password, merchant.password_hash);
+  if (!valid) {
+    return c.json({ error: "Invalid credentials" }, 401);
+  }
+
+  const accessToken = signToken(merchant.id, merchant.email, merchant.role);
+  const refreshToken = signRefreshToken(merchant.id, merchant.email, merchant.role);
+
+  return c.json({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    token_type: "Bearer",
+    expires_in: 86400,
+    user: {
+      id: merchant.id,
+      email: merchant.email,
+      role: merchant.role,
+      bch_address: merchant.bch_address,
+      merchant_address: merchant.merchant_address,
+      business_name: merchant.business_name,
+      encrypted_wallet: merchant.encrypted_wallet,
+    },
+  });
+});
 
 /**
  * POST /api/auth/challenge
@@ -244,7 +343,7 @@ auth.post("/verify", async (c) => {
     );
   }
 
-  const { address, signature, nonce } = parsed.data;
+  const { address, signature, nonce, role: requestedRole } = parsed.data;
 
   // Check that we issued this challenge
   const challenge = await challengeStore.get(address);
@@ -269,7 +368,6 @@ auth.post("/verify", async (c) => {
   // Verify the BCH signature
   const signatureValid = verifyBchSignature(address, challengeMessage, signature);
   if (!signatureValid) {
-    // In development mode, allow any non-empty signature for testing
     if (process.env.NODE_ENV === "production") {
       return c.json({ error: "Invalid signature" }, 401);
     }
@@ -287,14 +385,16 @@ auth.post("/verify", async (c) => {
   if (!merchant) {
     merchant = await prisma.merchant.create({
       data: {
+        email: `wallet_${address.slice(-12)}@cashtap.local`,
         bch_address: address,
         business_name: `Merchant ${address.slice(-8)}`,
+        role: requestedRole || "BUYER",
       },
     });
   }
 
-  const accessToken = signToken(merchant.id, address);
-  const refreshToken = signRefreshToken(merchant.id, address);
+  const accessToken = signToken(merchant.id, merchant.email, merchant.role);
+  const refreshToken = signRefreshToken(merchant.id, merchant.email, merchant.role);
 
   return c.json({
     access_token: accessToken,
@@ -305,6 +405,7 @@ auth.post("/verify", async (c) => {
       id: merchant.id,
       bch_address: merchant.bch_address,
       business_name: merchant.business_name,
+      role: merchant.role,
     },
   });
 });
@@ -337,10 +438,11 @@ auth.post("/refresh", async (c) => {
       return c.json({ error: "Merchant not found" }, 401);
     }
 
-    const accessToken = signToken(merchant.id, merchant.bch_address);
+    const accessToken = signToken(merchant.id, merchant.email, merchant.role);
     const newRefreshToken = signRefreshToken(
       merchant.id,
-      merchant.bch_address
+      merchant.email,
+      merchant.role
     );
 
     return c.json({

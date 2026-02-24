@@ -6,8 +6,8 @@ import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { useAuth } from "@/lib/auth-context";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, role, address } = useAuth();
+export default function BuyerLayout({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading, address } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -21,16 +21,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       router.replace("/onboarding");
     }
   }, [isLoading, isAuthenticated, address, router]);
-
-  useEffect(() => {
-    if (!isLoading && isAuthenticated && role === "BUYER" && address) {
-      // Allow BUYER to access settings, but redirect dashboard root to buyer
-      const path = window.location.pathname;
-      if (path === "/dashboard") {
-        router.replace("/buyer");
-      }
-    }
-  }, [isLoading, isAuthenticated, role, address, router]);
 
   if (isLoading) {
     return (

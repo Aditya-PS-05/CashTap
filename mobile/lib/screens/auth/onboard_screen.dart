@@ -13,205 +13,161 @@ class OnboardScreen extends StatefulWidget {
 }
 
 class _OnboardScreenState extends State<OnboardScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _businessNameController = TextEditingController();
-  final _emailController = TextEditingController();
+  bool _settingUp = false;
+  bool _done = false;
 
   @override
-  void dispose() {
-    _businessNameController.dispose();
-    _emailController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _setupWallet();
+  }
+
+  Future<void> _setupWallet() async {
+    setState(() => _settingUp = true);
+
+    final auth = context.read<AuthProvider>();
+    final success = await auth.setupWallet();
+
+    if (!mounted) return;
+
+    if (success) {
+      setState(() {
+        _settingUp = false;
+        _done = true;
+      });
+      // Router will handle redirect after state update
+    } else {
+      setState(() => _settingUp = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(auth.errorMessage ?? 'Failed to set up wallet'),
+          backgroundColor: AppTheme.errorRed,
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
     final theme = Theme.of(context);
+    final auth = context.watch<AuthProvider>();
 
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 28),
-          child: Form(
-            key: _formKey,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const SizedBox(height: 48),
-
-                // Header with 3D coin
-                Center(
-                  child: Image.asset(
-                    'assets/images/bch_coin_icon.png',
-                    width: 120,
-                    height: 120,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        color: AppTheme.bchGreen.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(
-                        Icons.storefront,
-                        size: 32,
-                        color: AppTheme.bchGreen,
-                      ),
+                Image.asset(
+                  'assets/images/bch_coin_icon.png',
+                  width: 100,
+                  height: 100,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: AppTheme.bchGreen.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(
+                      Icons.account_balance_wallet,
+                      size: 40,
+                      color: AppTheme.bchGreen,
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
-
+                const SizedBox(height: 32),
                 Text(
-                  'Set Up Your Business',
+                  _done
+                      ? 'Wallet Created!'
+                      : _settingUp
+                          ? 'Setting Up Your Wallet...'
+                          : 'Wallet Setup',
                   style: GoogleFonts.inter(
                     fontSize: 28,
                     fontWeight: FontWeight.w700,
                     color: theme.textTheme.displayLarge?.color,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 Text(
-                  'Tell us about your business so customers know who they\'re paying.',
+                  _done
+                      ? 'Your Bitcoin Cash wallet is ready to use.'
+                      : _settingUp
+                          ? 'Generating your wallet securely...'
+                          : 'There was an issue setting up your wallet.',
+                  textAlign: TextAlign.center,
                   style: theme.textTheme.bodyLarge?.copyWith(
                     color: theme.textTheme.bodySmall?.color,
                     height: 1.5,
                   ),
                 ),
-                const SizedBox(height: 40),
-
-                // Business name
-                Text(
-                  'Business Name',
-                  style: theme.textTheme.labelLarge,
-                ),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _businessNameController,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    hintText: 'e.g. Coffee Corner',
-                    prefixIcon: Icon(Icons.store_outlined),
+                const SizedBox(height: 32),
+                if (_settingUp)
+                  const CircularProgressIndicator(
+                    color: AppTheme.bchGreen,
                   ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter your business name';
-                    }
-                    if (value.trim().length < 2) {
-                      return 'Business name must be at least 2 characters';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 24),
-
-                // Email
-                Text(
-                  'Email Address',
-                  style: theme.textTheme.labelLarge,
-                ),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    hintText: 'you@business.com',
-                    prefixIcon: Icon(Icons.email_outlined),
+                if (_done)
+                  const Icon(
+                    Icons.check_circle,
+                    color: AppTheme.bchGreen,
+                    size: 64,
                   ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter your email';
-                    }
-                    final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
-                    if (!emailRegex.hasMatch(value.trim())) {
-                      return 'Please enter a valid email';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Wallet address display
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: theme.cardTheme.color,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.account_balance_wallet_outlined,
-                        color: AppTheme.bchGreen,
-                        size: 20,
+                if (!_settingUp && !_done) ...[
+                  if (auth.errorMessage != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.errorRed.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          auth.walletAddress ?? 'No wallet connected',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontFamily: 'monospace',
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      child: Text(
+                        auth.errorMessage!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: AppTheme.errorRed,
                         ),
                       ),
-                    ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  ElevatedButton(
+                    onPressed: _setupWallet,
+                    child: const Text('Retry'),
                   ),
-                ),
-
-                // Error message
-                if (auth.errorMessage != null) ...[
-                  const SizedBox(height: 16),
+                ],
+                if (auth.walletAddress != null && auth.walletAddress!.isNotEmpty) ...[
+                  const SizedBox(height: 24),
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppTheme.errorRed.withValues(alpha: 0.1),
+                      color: theme.cardTheme.color,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text(
-                      auth.errorMessage!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppTheme.errorRed,
-                      ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.account_balance_wallet_outlined,
+                          color: AppTheme.bchGreen,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            auth.walletAddress!,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
-
-                const SizedBox(height: 40),
-
-                // Get Started button
-                ElevatedButton(
-                  onPressed: auth.isLoading
-                      ? null
-                      : () async {
-                          if (_formKey.currentState!.validate()) {
-                            await auth.completeOnboarding(
-                              businessName: _businessNameController.text.trim(),
-                              email: _emailController.text.trim(),
-                            );
-                          }
-                        },
-                  child: auth.isLoading
-                      ? const SizedBox(
-                          height: 24,
-                          width: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text('Get Started'),
-                            SizedBox(width: 8),
-                            Icon(Icons.arrow_forward, size: 20),
-                          ],
-                        ),
-                ),
-                const SizedBox(height: 40),
               ],
             ),
           ),

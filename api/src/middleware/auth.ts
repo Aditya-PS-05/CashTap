@@ -6,7 +6,8 @@ const JWT_SECRET = process.env.JWT_SECRET || "bch-pay-dev-secret-change-me";
 
 export interface JwtPayload {
   merchantId: string;
-  address: string;
+  email: string;
+  role?: string;
   iat: number;
   exp: number;
 }
@@ -53,8 +54,8 @@ export async function authMiddleware(c: Context, next: Next) {
 /**
  * Helper to sign a JWT for a merchant.
  */
-export function signToken(merchantId: string, address: string): string {
-  return jwt.sign({ merchantId, address }, JWT_SECRET, { expiresIn: "24h" });
+export function signToken(merchantId: string, email: string, role?: string): string {
+  return jwt.sign({ merchantId, email, role: role || "BUYER" }, JWT_SECRET, { expiresIn: "24h" });
 }
 
 /**
@@ -62,9 +63,10 @@ export function signToken(merchantId: string, address: string): string {
  */
 export function signRefreshToken(
   merchantId: string,
-  address: string
+  email: string,
+  role?: string
 ): string {
-  return jwt.sign({ merchantId, address }, JWT_SECRET, { expiresIn: "7d" });
+  return jwt.sign({ merchantId, email, role: role || "BUYER" }, JWT_SECRET, { expiresIn: "7d" });
 }
 
 /**

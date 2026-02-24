@@ -268,7 +268,7 @@ invoices.post("/:id/send", authMiddleware, async (c) => {
       const result = await emailService.sendInvoice({
         to: invoice.customer_email,
         invoiceId: invoice.id,
-        merchantName: invoice.merchant.business_name,
+        merchantName: invoice.merchant.business_name ?? 'Merchant',
         totalBch,
         totalUsd: "0.00", // USD conversion happens client-side
         dueDate: invoice.due_date?.toISOString().split("T")[0] ?? null,

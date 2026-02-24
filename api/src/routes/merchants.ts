@@ -3,7 +3,7 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { prisma } from "../lib/prisma.js";
-import { authMiddleware } from "../middleware/auth.js";
+import { authMiddleware, signToken, signRefreshToken } from "../middleware/auth.js";
 import type { AppEnv } from "../types/hono.js";
 
 const merchants = new Hono<AppEnv>();
@@ -32,11 +32,75 @@ const updateSchema = z.object({
   display_currency: z.enum(["BCH", "USD"]).optional(),
 });
 
+const setupMerchantSchema = z.object({
+  business_name: z.string().min(1, "Business name is required").max(255),
+  merchant_address: z
+    .string()
+    .regex(
+      /^(bitcoincash:|bchtest:)?[qpzrs][a-z0-9]{41,}$/i,
+      "Invalid BCH address format"
+    )
+    .optional(),
+  logo_url: z.string().url().optional(),
+});
+
 // --- Routes ---
 
 /**
+ * POST /api/merchants/setup
+ * Upgrade a BUYER to MERCHANT. Sets business_name, merchant_address, role=MERCHANT.
+ * Returns a fresh JWT with role=MERCHANT.
+ */
+merchants.post("/setup", authMiddleware, async (c) => {
+  const merchantId = c.get("merchantId") as string;
+  const body = await c.req.json();
+  const parsed = setupMerchantSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return c.json(
+      { error: "Validation failed", details: parsed.error.flatten() },
+      400
+    );
+  }
+
+  const { business_name, merchant_address, logo_url } = parsed.data;
+
+  const data: Record<string, unknown> = {
+    business_name,
+    role: "MERCHANT",
+  };
+  if (merchant_address) data.merchant_address = merchant_address;
+  if (logo_url) data.logo_url = logo_url;
+
+  const merchant = await prisma.merchant.update({
+    where: { id: merchantId },
+    data,
+    select: {
+      id: true,
+      email: true,
+      bch_address: true,
+      merchant_address: true,
+      business_name: true,
+      role: true,
+      logo_url: true,
+    },
+  });
+
+  const accessToken = signToken(merchant.id, merchant.email, merchant.role);
+  const refreshToken = signRefreshToken(merchant.id, merchant.email, merchant.role);
+
+  return c.json({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    token_type: "Bearer",
+    expires_in: 86400,
+    user: merchant,
+  });
+});
+
+/**
  * POST /api/merchants
- * Register a new merchant.
+ * Register a new merchant (legacy endpoint).
  */
 merchants.post("/", async (c) => {
   const body = await c.req.json();
@@ -70,12 +134,13 @@ merchants.post("/", async (c) => {
 
   const merchant = await prisma.merchant.create({
     data: {
+      email: email ?? `wallet_${bch_address.slice(-12)}@cashtap.local`,
       bch_address,
       business_name,
-      email: email ?? null,
       logo_url: logo_url ?? null,
       webhook_url: webhook_url ?? null,
       api_key_hash: apiKeyHash,
+      role: "MERCHANT",
     },
   });
 
@@ -118,12 +183,15 @@ merchants.get("/me", authMiddleware, async (c) => {
     where: { id: merchantId },
     select: {
       id: true,
-      bch_address: true,
-      business_name: true,
       email: true,
+      bch_address: true,
+      merchant_address: true,
+      business_name: true,
       logo_url: true,
       webhook_url: true,
       display_currency: true,
+      role: true,
+      encrypted_wallet: true,
       created_at: true,
       updated_at: true,
       _count: {
@@ -217,6 +285,51 @@ merchants.put("/me", authMiddleware, async (c) => {
   });
 
   return c.json({ merchant });
+});
+
+/**
+ * PATCH /api/merchants/me/role
+ * Switch the authenticated user's role between MERCHANT and BUYER.
+ * Returns a fresh JWT with the new role.
+ */
+merchants.patch("/me/role", authMiddleware, async (c) => {
+  const merchantId = c.get("merchantId") as string;
+  const body = await c.req.json();
+
+  const roleSchema = z.object({
+    role: z.enum(["MERCHANT", "BUYER"]),
+  });
+
+  const parsed = roleSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { error: "Validation failed", details: parsed.error.flatten() },
+      400
+    );
+  }
+
+  const merchant = await prisma.merchant.update({
+    where: { id: merchantId },
+    data: { role: parsed.data.role },
+    select: {
+      id: true,
+      email: true,
+      bch_address: true,
+      business_name: true,
+      role: true,
+    },
+  });
+
+  const accessToken = signToken(merchant.id, merchant.email, merchant.role);
+  const refreshToken = signRefreshToken(merchant.id, merchant.email, merchant.role);
+
+  return c.json({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    token_type: "Bearer",
+    expires_in: 86400,
+    merchant,
+  });
 });
 
 export default merchants;

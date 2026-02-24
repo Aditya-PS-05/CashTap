@@ -1,8 +1,10 @@
 class Merchant {
   final String id;
-  final String businessName;
+  final String? businessName;
   final String email;
-  final String bchAddress;
+  final String? bchAddress;
+  final String? merchantAddress;
+  final String? role;
   final String? logoUrl;
   final String? webhookUrl;
   final String displayCurrency;
@@ -11,9 +13,11 @@ class Merchant {
 
   Merchant({
     required this.id,
-    required this.businessName,
+    this.businessName,
     required this.email,
-    required this.bchAddress,
+    this.bchAddress,
+    this.merchantAddress,
+    this.role,
     this.logoUrl,
     this.webhookUrl,
     this.displayCurrency = 'BCH',
@@ -25,9 +29,11 @@ class Merchant {
   factory Merchant.fromJson(Map<String, dynamic> json) {
     return Merchant(
       id: json['id'] as String? ?? '',
-      businessName: json['business_name'] as String? ?? '',
+      businessName: json['business_name'] as String?,
       email: json['email'] as String? ?? '',
-      bchAddress: json['bch_address'] as String? ?? '',
+      bchAddress: json['bch_address'] as String?,
+      merchantAddress: json['merchant_address'] as String?,
+      role: json['role'] as String?,
       logoUrl: json['logo_url'] as String?,
       webhookUrl: json['webhook_url'] as String?,
       displayCurrency: json['display_currency'] as String? ?? 'BCH',
@@ -46,6 +52,8 @@ class Merchant {
       'business_name': businessName,
       'email': email,
       'bch_address': bchAddress,
+      'merchant_address': merchantAddress,
+      'role': role,
       'logo_url': logoUrl,
       'webhook_url': webhookUrl,
       'display_currency': displayCurrency,
@@ -59,6 +67,8 @@ class Merchant {
     String? businessName,
     String? email,
     String? bchAddress,
+    String? merchantAddress,
+    String? role,
     String? logoUrl,
     String? webhookUrl,
     String? displayCurrency,
@@ -70,6 +80,8 @@ class Merchant {
       businessName: businessName ?? this.businessName,
       email: email ?? this.email,
       bchAddress: bchAddress ?? this.bchAddress,
+      merchantAddress: merchantAddress ?? this.merchantAddress,
+      role: role ?? this.role,
       logoUrl: logoUrl ?? this.logoUrl,
       webhookUrl: webhookUrl ?? this.webhookUrl,
       displayCurrency: displayCurrency ?? this.displayCurrency,

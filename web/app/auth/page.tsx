@@ -4,102 +4,65 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Wallet, KeyRound, ArrowRight, Globe, Loader2, Copy, Check } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { ArrowRight, Loader2, Mail, Lock } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
-import { isPaytacaAvailable, connectPaytaca } from "@/lib/paytaca";
-import { createWallet, deriveFromMnemonic, signMessage, isValidMnemonic } from "@/lib/bch-wallet";
 
-type Mode = "choose" | "import" | "create" | "show-seed";
+type Mode = "signin" | "signup";
 
 export default function AuthPage() {
   const router = useRouter();
-  const { login } = useAuth();
-  const [mode, setMode] = useState<Mode>("choose");
+  const { login, register, user } = useAuth();
+  const [mode, setMode] = useState<Mode>("signin");
   const [loading, setLoading] = useState(false);
-  const [seedPhrase, setSeedPhrase] = useState("");
-  const [generatedSeed, setGeneratedSeed] = useState("");
-  const [seedCopied, setSeedCopied] = useState(false);
-  const [loginDone, setLoginDone] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
-  const paytacaAvailable = typeof window !== "undefined" && isPaytacaAvailable();
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
 
-  const handlePaytaca = async () => {
     setLoading(true);
     try {
-      const { address, signMessage: signFn } = await connectPaytaca();
-      await login(address, signFn);
-      toast.success("Connected with Paytaca!");
-      router.push("/dashboard");
+      await login(email.trim(), password);
+      toast.success("Welcome back!");
+      // Redirect based on wallet status — if no wallet, go to onboarding
+      router.push("/onboarding");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to connect Paytaca");
+      toast.error(err instanceof Error ? err.message : "Login failed");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateWallet = async () => {
-    setLoading(true);
-    setLoginDone(false);
-    try {
-      const wallet = createWallet();
-      setGeneratedSeed(wallet.mnemonic);
-      setMode("show-seed");
-
-      // Authenticate in the background while user sees the seed
-      const signFn = async (message: string) => {
-        return signMessage(wallet.privateKey, message);
-      };
-      await login(wallet.address, signFn);
-      setLoginDone(true);
-      toast.success("Wallet created & authenticated!");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create wallet");
-      setMode("choose");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSeedContinue = () => {
-    router.push("/onboarding");
-  };
-
-  const copySeed = () => {
-    navigator.clipboard.writeText(generatedSeed);
-    setSeedCopied(true);
-    toast.success("Seed phrase copied!");
-    setTimeout(() => setSeedCopied(false), 2000);
-  };
-
-  const handleImport = async () => {
-    const trimmed = seedPhrase.trim();
-    if (!trimmed) {
-      toast.error("Please enter your seed phrase");
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !password || !confirmPassword) {
+      toast.error("Please fill in all fields");
       return;
     }
-    const words = trimmed.split(/\s+/);
-    if (words.length !== 12 && words.length !== 24) {
-      toast.error("Seed phrase must be 12 or 24 words");
+    if (password !== confirmPassword) {
+      toast.error("Passwords do not match");
       return;
     }
-    if (!isValidMnemonic(trimmed)) {
-      toast.error("Invalid seed phrase — check your words and try again");
+    if (password.length < 8) {
+      toast.error("Password must be at least 8 characters");
       return;
     }
 
     setLoading(true);
     try {
-      const wallet = deriveFromMnemonic(trimmed);
-      const signFn = async (message: string) => {
-        return signMessage(wallet.privateKey, message);
-      };
-      await login(wallet.address, signFn);
-      toast.success("Wallet imported!");
-      router.push("/dashboard");
+      await register(email.trim(), password);
+      toast.success("Account created!");
+      router.push("/onboarding");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to import wallet");
+      toast.error(err instanceof Error ? err.message : "Registration failed");
     } finally {
       setLoading(false);
     }
@@ -115,97 +78,119 @@ export default function AuthPage() {
             </div>
             <h1 className="text-2xl font-bold">CashTap</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Connect your Bitcoin Cash wallet to get started
+              {mode === "signin" ? "Sign in to your account" : "Create your account"}
             </p>
           </div>
 
-          {mode === "choose" && (
-            <div className="space-y-3">
-              {paytacaAvailable && (
-                <Button
-                  className="w-full h-12 gap-3 text-base"
-                  onClick={handlePaytaca}
-                  disabled={loading}
-                >
-                  {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Globe className="h-5 w-5" />}
-                  Connect Paytaca
-                </Button>
-              )}
-              <Button
-                className="w-full h-12 gap-3 text-base"
-                variant={paytacaAvailable ? "outline" : "default"}
-                onClick={handleCreateWallet}
-                disabled={loading}
-              >
-                {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Wallet className="h-5 w-5" />}
-                Create New Wallet
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full h-12 gap-3 text-base"
-                onClick={() => setMode("import")}
-                disabled={loading}
-              >
-                <KeyRound className="h-5 w-5" /> Import Seed Phrase
-              </Button>
-              <p className="text-xs text-muted-foreground pt-2">
-                Your keys stay on your device. We never have access to your funds.
-              </p>
-            </div>
-          )}
+          {/* Tab switcher */}
+          <div className="flex rounded-lg border p-1 gap-1">
+            <button
+              className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${mode === "signin" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => setMode("signin")}
+              disabled={loading}
+            >
+              Sign In
+            </button>
+            <button
+              className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${mode === "signup" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => setMode("signup")}
+              disabled={loading}
+            >
+              Sign Up
+            </button>
+          </div>
 
-          {mode === "show-seed" && (
-            <div className="space-y-4">
-              <div className="text-left">
-                <p className="text-sm font-medium text-destructive mb-2">
-                  Write down your seed phrase and store it safely. You will need it to recover your wallet.
-                </p>
-                <div className="rounded-md border bg-muted p-4">
-                  <p className="text-sm font-mono leading-relaxed break-words">{generatedSeed}</p>
+          {mode === "signin" ? (
+            <form onSubmit={handleSignIn} className="space-y-4 text-left">
+              <div>
+                <label className="text-sm font-medium">Email</label>
+                <div className="relative mt-1">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="pl-10"
+                    required
+                  />
                 </div>
               </div>
-              {loading && (
-                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Authenticating...
+              <div>
+                <label className="text-sm font-medium">Password</label>
+                <div className="relative mt-1">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="password"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pl-10"
+                    required
+                  />
                 </div>
-              )}
-              <div className="flex gap-2">
-                <Button variant="outline" className="flex-1 gap-2" onClick={copySeed}>
-                  {seedCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                  {seedCopied ? "Copied" : "Copy"}
-                </Button>
-                <Button className="flex-1 gap-2" onClick={handleSeedContinue} disabled={!loginDone}>
-                  {loginDone ? "Continue" : "Waiting..."} <ArrowRight className="h-4 w-4" />
-                </Button>
               </div>
-            </div>
-          )}
-
-          {mode === "import" && (
-            <div className="space-y-4">
-              <div className="text-left">
-                <label className="text-sm font-medium">Seed Phrase</label>
-                <textarea
-                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[80px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  placeholder="Enter your 12 or 24 word seed phrase..."
-                  value={seedPhrase}
-                  onChange={(e) => setSeedPhrase(e.target.value)}
-                />
-              </div>
-              <Button
-                className="w-full h-12 gap-2"
-                onClick={handleImport}
-                disabled={loading}
-              >
+              <Button type="submit" className="w-full h-12 gap-2 text-base" disabled={loading}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Import & Connect <ArrowRight className="h-4 w-4" />
+                Sign In <ArrowRight className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setMode("choose")} disabled={loading}>
-                Back
+            </form>
+          ) : (
+            <form onSubmit={handleSignUp} className="space-y-4 text-left">
+              <div>
+                <label className="text-sm font-medium">Email</label>
+                <div className="relative mt-1">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="pl-10"
+                    required
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Password</label>
+                <div className="relative mt-1">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="password"
+                    placeholder="Min 8 characters"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pl-10"
+                    minLength={8}
+                    required
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Confirm Password</label>
+                <div className="relative mt-1">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="password"
+                    placeholder="Confirm your password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="pl-10"
+                    minLength={8}
+                    required
+                  />
+                </div>
+              </div>
+              <Button type="submit" className="w-full h-12 gap-2 text-base" disabled={loading}>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Create Account <ArrowRight className="h-4 w-4" />
               </Button>
-            </div>
+            </form>
           )}
+
+          <p className="text-xs text-muted-foreground pt-2">
+            Your wallet is auto-created during setup. Keys stay on your device.
+          </p>
         </CardContent>
       </Card>
     </div>

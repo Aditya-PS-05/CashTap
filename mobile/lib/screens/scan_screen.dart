@@ -4,7 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+
 import '../config/theme.dart';
+import '../providers/auth_provider.dart';
 import '../services/bch_service.dart';
 
 class ScanScreen extends StatefulWidget {
@@ -251,12 +255,20 @@ class _ScanScreenState extends State<ScanScreen> {
                     child: ElevatedButton(
                       onPressed: () {
                         Navigator.pop(context);
-                        // In a full implementation, navigate to send/pay screen
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Payment flow coming soon'),
-                          ),
-                        );
+                        final auth = context.read<AuthProvider>();
+                        if (auth.isBuyer) {
+                          // Navigate to send screen with pre-filled address/amount
+                          context.push('/send', extra: {
+                            'address': address,
+                            if (amount != null) 'amount': double.tryParse(amount),
+                          });
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Switch to Buyer mode to send BCH'),
+                            ),
+                          );
+                        }
                         setState(() => _hasScanned = false);
                       },
                       child: const Text('Proceed'),

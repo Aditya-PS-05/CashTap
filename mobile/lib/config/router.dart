@@ -13,6 +13,8 @@ import '../screens/settings_screen.dart';
 import '../screens/transaction_detail_screen.dart';
 import '../screens/payment_links_screen.dart';
 import '../screens/contracts_screen.dart';
+import '../screens/buyer/buyer_home_screen.dart';
+import '../screens/send_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -33,7 +35,7 @@ GoRouter createRouter(AuthProvider authProvider) {
         return '/auth';
       }
 
-      // If authenticated but not onboarded, redirect to onboard
+      // If authenticated but no wallet (not onboarded), go to onboard
       if (!isOnboarded) {
         if (currentPath == '/onboard') return null;
         return '/onboard';
@@ -41,7 +43,7 @@ GoRouter createRouter(AuthProvider authProvider) {
 
       // If authenticated and onboarded, redirect away from auth/onboard
       if (currentPath == '/auth' || currentPath == '/onboard' || currentPath == '/') {
-        return '/home';
+        return authProvider.isMerchant ? '/home' : '/buyer';
       }
 
       return null;
@@ -61,8 +63,12 @@ GoRouter createRouter(AuthProvider authProvider) {
       ),
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
-        builder: (context, state, child) => _ScaffoldWithNavBar(child: child),
+        builder: (context, state, child) => _ScaffoldWithNavBar(
+          authProvider: authProvider,
+          child: child,
+        ),
         routes: [
+          // Merchant routes
           GoRoute(
             path: '/home',
             pageBuilder: (context, state) => const NoTransitionPage(
@@ -93,7 +99,26 @@ GoRouter createRouter(AuthProvider authProvider) {
               child: SettingsScreen(),
             ),
           ),
+          // Buyer routes
+          GoRoute(
+            path: '/buyer',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: BuyerHomeScreen(),
+            ),
+          ),
         ],
+      ),
+      // Full-screen modal routes
+      GoRoute(
+        path: '/send',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return SendScreen(
+            prefillAddress: extra['address'] as String?,
+            prefillAmount: extra['amount'] as double?,
+          );
+        },
       ),
       GoRoute(
         path: '/pos/charge',
@@ -133,8 +158,24 @@ GoRouter createRouter(AuthProvider authProvider) {
 
 class _ScaffoldWithNavBar extends StatelessWidget {
   final Widget child;
+  final AuthProvider authProvider;
 
-  const _ScaffoldWithNavBar({required this.child});
+  const _ScaffoldWithNavBar({required this.child, required this.authProvider});
+
+  @override
+  Widget build(BuildContext context) {
+    final isBuyer = authProvider.isBuyer;
+
+    if (isBuyer) {
+      return _BuyerScaffold(child: child);
+    }
+    return _MerchantScaffold(child: child);
+  }
+}
+
+class _MerchantScaffold extends StatelessWidget {
+  final Widget child;
+  const _MerchantScaffold({required this.child});
 
   int _calculateSelectedIndex(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
@@ -188,6 +229,66 @@ class _ScaffoldWithNavBar extends StatelessWidget {
             icon: Icon(Icons.receipt_long_outlined),
             selectedIcon: Icon(Icons.receipt_long),
             label: 'Activity',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BuyerScaffold extends StatelessWidget {
+  final Widget child;
+  const _BuyerScaffold({required this.child});
+
+  int _calculateSelectedIndex(BuildContext context) {
+    final location = GoRouterState.of(context).matchedLocation;
+    if (location.startsWith('/buyer')) return 0;
+    if (location.startsWith('/scan')) return 1;
+    if (location.startsWith('/activity')) return 2;
+    if (location.startsWith('/settings')) return 3;
+    return 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedIndex = _calculateSelectedIndex(context);
+
+    return Scaffold(
+      body: child,
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: selectedIndex,
+        onDestinationSelected: (index) {
+          switch (index) {
+            case 0:
+              context.go('/buyer');
+            case 1:
+              context.go('/scan');
+            case 2:
+              context.go('/activity');
+            case 3:
+              context.go('/settings');
+          }
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.account_balance_wallet_outlined),
+            selectedIcon: Icon(Icons.account_balance_wallet),
+            label: 'Wallet',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.qr_code_scanner_outlined),
+            selectedIcon: Icon(Icons.qr_code_scanner),
+            label: 'Scan',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long),
+            label: 'History',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),

@@ -2,23 +2,30 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 
-interface Merchant {
+type UserRole = "MERCHANT" | "BUYER" | null;
+
+interface User {
   id: string;
-  name: string;
-  email?: string;
-  logoUrl?: string;
-  address: string;
+  email: string;
+  bch_address?: string | null;
+  merchant_address?: string | null;
+  business_name?: string | null;
+  role: string;
+  encrypted_wallet?: string | null;
 }
 
 interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
-  merchant: Merchant | null;
+  user: User | null;
   address: string | null;
+  role: UserRole;
 }
 
 interface AuthContextType extends AuthState {
-  login: (address: string, signFn: (msg: string) => Promise<string>) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string) => Promise<void>;
+  upgradeToMerchant: (businessName: string, merchantAddress?: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -30,8 +37,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
     isAuthenticated: false,
     isLoading: true,
-    merchant: null,
+    user: null,
     address: null,
+    role: null,
   });
 
   // Check existing session on mount
@@ -44,18 +52,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await fetch("/api/auth/session", { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
-        if (data.address) {
-          // Fetch merchant profile
-          const merchantRes = await fetch(`${API_BASE}/api/merchants/me`, {
+        if (data.email) {
+          // Fetch user profile
+          const profileRes = await fetch(`${API_BASE}/api/merchants/me`, {
             headers: { Authorization: `Bearer ${data.accessToken}` },
           });
-          const merchant = merchantRes.ok ? await merchantRes.json() : null;
+          const profileData = profileRes.ok ? await profileRes.json() : null;
+          const merchant = profileData?.merchant;
+
+          const role = data.role || merchant?.role || null;
+          const user: User = merchant
+            ? {
+                id: merchant.id,
+                email: merchant.email,
+                bch_address: merchant.bch_address,
+                merchant_address: merchant.merchant_address,
+                business_name: merchant.business_name,
+                role: merchant.role,
+                encrypted_wallet: merchant.encrypted_wallet,
+              }
+            : { id: "", email: data.email, role: role || "BUYER" };
 
           setState({
             isAuthenticated: true,
             isLoading: false,
-            merchant,
-            address: data.address,
+            user,
+            address: merchant?.bch_address || null,
+            role,
           });
           return;
         }
@@ -66,44 +89,116 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, isLoading: false }));
   }
 
-  const login = useCallback(async (address: string, signFn: (msg: string) => Promise<string>) => {
-    // 1. Request challenge from API
-    const challengeRes = await fetch(`${API_BASE}/api/auth/challenge`, {
+  const register = useCallback(async (email: string, password: string) => {
+    const res = await fetch(`${API_BASE}/api/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ address }),
+      body: JSON.stringify({ email, password }),
     });
-    if (!challengeRes.ok) throw new Error("Failed to get challenge");
-    const { nonce, message } = await challengeRes.json();
 
-    // 2. Sign the challenge message
-    const signature = await signFn(message);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: "Registration failed" }));
+      throw new Error(err.error || "Registration failed");
+    }
 
-    // 3. Verify signature with API
-    const verifyRes = await fetch(`${API_BASE}/api/auth/verify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ address, signature, nonce }),
-    });
-    if (!verifyRes.ok) throw new Error("Signature verification failed");
-    const data = await verifyRes.json();
-    const accessToken = data.access_token;
-    const refreshToken = data.refresh_token;
-    const merchant = data.merchant;
+    const data = await res.json();
+    const user = data.user;
 
-    // 4. Store tokens in httpOnly cookie via route handler
+    // Store tokens in httpOnly cookie
     await fetch("/api/auth/session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accessToken, refreshToken, address }),
+      body: JSON.stringify({
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        email: user.email,
+        role: user.role,
+      }),
     });
 
     setState({
       isAuthenticated: true,
       isLoading: false,
-      merchant: merchant || null,
-      address,
+      user,
+      address: user.bch_address || null,
+      role: user.role,
     });
+  }, []);
+
+  const login = useCallback(async (email: string, password: string) => {
+    const res = await fetch(`${API_BASE}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: "Login failed" }));
+      throw new Error(err.error || "Login failed");
+    }
+
+    const data = await res.json();
+    const user = data.user;
+
+    // Store tokens in httpOnly cookie
+    await fetch("/api/auth/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        email: user.email,
+        role: user.role,
+      }),
+    });
+
+    setState({
+      isAuthenticated: true,
+      isLoading: false,
+      user,
+      address: user.bch_address || null,
+      role: user.role,
+    });
+  }, []);
+
+  const upgradeToMerchant = useCallback(async (businessName: string, merchantAddress?: string) => {
+    const sessionRes = await fetch("/api/auth/session", { credentials: "include" });
+    if (!sessionRes.ok) throw new Error("No session");
+    const session = await sessionRes.json();
+
+    const res = await fetch(`${API_BASE}/api/merchants/setup`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.accessToken}`,
+      },
+      body: JSON.stringify({
+        business_name: businessName,
+        merchant_address: merchantAddress,
+      }),
+    });
+
+    if (!res.ok) throw new Error("Failed to upgrade to merchant");
+    const data = await res.json();
+    const user = data.user;
+
+    // Update session with new tokens
+    await fetch("/api/auth/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        email: user.email,
+        role: "MERCHANT",
+      }),
+    });
+
+    setState((s) => ({
+      ...s,
+      user: { ...s.user!, ...user },
+      role: "MERCHANT",
+    }));
   }, []);
 
   const logout = useCallback(async () => {
@@ -111,13 +206,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({
       isAuthenticated: false,
       isLoading: false,
-      merchant: null,
+      user: null,
       address: null,
+      role: null,
     });
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout }}>
+    <AuthContext.Provider value={{ ...state, login, register, upgradeToMerchant, logout }}>
       {children}
     </AuthContext.Provider>
   );

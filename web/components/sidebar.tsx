@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 import {
   LayoutDashboard,
   Link2,
@@ -14,9 +15,12 @@ import {
   FileCode2,
   Zap,
   Code2,
+  Wallet,
+  Send,
+  Store,
 } from "lucide-react";
 
-const navItems = [
+const merchantNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, tour: "dashboard" },
   { href: "/dashboard/payment-links", label: "Payment Links", icon: Link2, tour: "payment-links" },
   { href: "/dashboard/transactions", label: "Transactions", icon: ArrowLeftRight, tour: "transactions" },
@@ -28,8 +32,18 @@ const navItems = [
   { href: "/dashboard/settings", label: "Settings", icon: Settings, tour: "settings" },
 ];
 
+const buyerNavItems = [
+  { href: "/buyer", label: "Wallet", icon: Wallet, tour: "wallet" },
+  { href: "/dashboard/transactions", label: "Transactions", icon: ArrowLeftRight, tour: "transactions" },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings, tour: "settings" },
+  { href: "/dashboard/settings#become-merchant", label: "Become a Merchant", icon: Store, tour: "upgrade" },
+];
+
 export function Sidebar() {
   const pathname = usePathname();
+  const { role } = useAuth();
+
+  const navItems = role === "BUYER" ? buyerNavItems : merchantNavItems;
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r bg-sidebar">
@@ -38,13 +52,18 @@ export function Sidebar() {
           <Zap className="h-4 w-4 text-primary-foreground" />
         </div>
         <span className="text-lg font-bold text-sidebar-foreground">CashTap</span>
+        {role && (
+          <span className="ml-auto text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+            {role}
+          </span>
+        )}
       </div>
 
       <nav className="flex flex-col gap-1 p-4">
         {navItems.map((item) => {
           const isActive =
-            item.href === "/dashboard"
-              ? pathname === "/dashboard"
+            (item.href === "/dashboard" || item.href === "/buyer")
+              ? pathname === item.href
               : pathname.startsWith(item.href);
           return (
             <Link

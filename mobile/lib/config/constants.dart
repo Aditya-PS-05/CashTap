@@ -26,6 +26,9 @@ class AppConstants {
   static const String walletAddressKey = 'wallet_address';
   static const String seedPhraseKey = 'seed_phrase';
   static const String onboardedKey = 'onboarded';
+  static const String emailKey = 'user_email';
+  static const String merchantAddressKey = 'merchant_address';
+  static const String userRoleKey = 'user_role';
   static const String themeModeKey = 'theme_mode';
   static const String bchAcceptedKey = 'bch_accepted';
   static const String cashTokenAcceptedKey = 'cashtoken_accepted';

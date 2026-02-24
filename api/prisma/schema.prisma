@@ -7,15 +7,24 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  MERCHANT
+  BUYER
+}
+
 model Merchant {
-  id           String   @id @default(cuid())
-  bch_address  String   @unique
-  business_name String
-  email        String?
-  logo_url     String?
-  api_key_hash String?
+  id               String   @id @default(cuid())
+  email            String   @unique
+  password_hash    String?
+  bch_address      String?  @unique
+  merchant_address String?
+  encrypted_wallet String?
+  business_name    String?
+  logo_url         String?
+  api_key_hash     String?
   webhook_url      String?
   display_currency String   @default("BCH")
+  role             UserRole @default(BUYER)
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
 

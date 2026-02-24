@@ -29,6 +29,7 @@ class WalletCryptoService {
 
   // BIP44 coin type 145 = BCH
   static const _bip44Path = "m/44'/145'/0'/0/0";
+  static const _bip44MerchantPath = "m/44'/145'/1'/0/0";
   static const _cashAddrCharset = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 
   /// Generate a new 12-word BIP39 mnemonic and derive the first BCH address.
@@ -53,6 +54,32 @@ class WalletCryptoService {
 
     final pubKeyHash = _hash160(child.publicKey);
     // Use testnet prefix to match the web wallet (chipnet)
+    final address = _encodeCashAddress('bchtest', 0, pubKeyHash);
+
+    return WalletKeys(
+      mnemonic: mnemonic,
+      privateKey: child.privateKey!,
+      publicKey: child.publicKey,
+      address: address,
+    );
+  }
+
+  /// Derive a merchant BCH address from a mnemonic using account index 1.
+  /// Path: m/44'/145'/1'/0/0
+  static WalletKeys deriveMerchantAddress(String mnemonic) {
+    if (!bip39.validateMnemonic(mnemonic)) {
+      throw Exception('Invalid seed phrase');
+    }
+
+    final seed = bip39.mnemonicToSeed(mnemonic);
+    final root = bip32.BIP32.fromSeed(seed);
+    final child = root.derivePath(_bip44MerchantPath);
+
+    if (child.privateKey == null) {
+      throw Exception('Failed to derive private key from seed');
+    }
+
+    final pubKeyHash = _hash160(child.publicKey);
     final address = _encodeCashAddress('bchtest', 0, pubKeyHash);
 
     return WalletKeys(
@@ -130,6 +157,37 @@ class WalletCryptoService {
     sig.setRange(33, 65, _bigIntToBytes(normalizedS, 32));
 
     return base64.encode(sig);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Public helpers
+  // ---------------------------------------------------------------------------
+
+  /// Decode a CashAddr address and return its 20-byte hash160 payload.
+  static Uint8List addressToHash160(String address) {
+    // Strip prefix
+    final colonIdx = address.indexOf(':');
+    if (colonIdx == -1) throw Exception('Invalid CashAddr: missing prefix');
+    final payload = address.substring(colonIdx + 1);
+
+    // Decode cashaddr characters to 5-bit values
+    final data5 = <int>[];
+    for (final c in payload.codeUnits) {
+      final ch = String.fromCharCode(c).toLowerCase();
+      final idx = _cashAddrCharset.indexOf(ch);
+      if (idx == -1) throw Exception('Invalid CashAddr character: $ch');
+      data5.add(idx);
+    }
+
+    // Remove 8 checksum values
+    final withoutChecksum = data5.sublist(0, data5.length - 8);
+
+    // Convert 5-bit groups back to 8-bit
+    final payload8 = _convertBits(withoutChecksum, 5, 8, false);
+
+    // First byte is version, rest is the hash160
+    if (payload8.length < 21) throw Exception('CashAddr payload too short');
+    return Uint8List.fromList(payload8.sublist(1, 21));
   }
 
   // ---------------------------------------------------------------------------

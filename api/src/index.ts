@@ -14,6 +14,7 @@ import cashtokenRoutes from "./routes/cashtokens.js";
 import priceRoutes from "./routes/price.js";
 import checkoutRoutes from "./routes/checkout.js";
 import eventRoutes from "./routes/events.js";
+import walletRoutes from "./routes/wallet.js";
 import { rateLimiter, authRateLimiter } from "./middleware/rate-limit.js";
 
 const app = new Hono();
@@ -124,6 +125,7 @@ app.route("/api/cashtokens", cashtokenRoutes);
 app.route("/api/price", priceRoutes);
 app.route("/api/checkout", checkoutRoutes);
 app.route("/api/events", eventRoutes);
+app.route("/api/wallet", walletRoutes);
 
 // ---------------------------------------------------------------------------
 // Route groups — versioned /api/v1/ prefix (with rate limiting)
@@ -145,6 +147,7 @@ app.route("/api/v1/cashtokens", cashtokenRoutes);
 app.route("/api/v1/price", priceRoutes);
 app.route("/api/v1/checkout", checkoutRoutes);
 app.route("/api/v1/events", eventRoutes);
+app.route("/api/v1/wallet", walletRoutes);
 
 // ---------------------------------------------------------------------------
 // Start server

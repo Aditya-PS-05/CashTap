@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -27,6 +28,12 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+
+  // Merchant upgrade
+  bool _upgradingToMerchant = false;
+  final TextEditingController _businessNameController = TextEditingController();
+
   // Payment settings
   bool _zeroConfEnabled = true;
   final bool _bchAccepted = true;
@@ -67,6 +74,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
+    _businessNameController.dispose();
     _minAmountController.dispose();
     _loyaltyTokenNameController.dispose();
     _loyaltyTokenSymbolController.dispose();
@@ -192,8 +200,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final auth = context.watch<AuthProvider>();
     final wallet = context.watch<WalletProvider>();
     final merchant = auth.currentMerchant;
-
-    // zeroConfEnabled is a client-side preference, not from API
+    final isMerchant = auth.isMerchant;
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -209,7 +216,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 24),
 
-            // ── Merchant Profile ──
+            // ── Profile ──
             Row(
               children: [
                 Image.asset(
@@ -217,11 +224,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   width: 24,
                   height: 24,
                   errorBuilder: (context, error, stackTrace) =>
-                      const Icon(Icons.storefront, size: 20, color: AppTheme.bchGreen),
+                      const Icon(Icons.person, size: 20, color: AppTheme.bchGreen),
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Merchant Profile',
+                  isMerchant ? 'Merchant Profile' : 'Profile',
                   style: theme.textTheme.titleLarge?.copyWith(
                     color: AppTheme.bchGreen,
                   ),
@@ -232,10 +239,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildCard(
               theme,
               children: [
-                _buildInfoRow(
-                    theme, 'Business Name', merchant?.businessName ?? '--'),
+                if (isMerchant) ...[
+                  _buildInfoRow(
+                      theme, 'Business Name', merchant?.businessName ?? '--'),
+                  const Divider(height: 1),
+                ],
+                _buildInfoRow(theme, 'Email', auth.email ?? merchant?.email ?? '--'),
                 const Divider(height: 1),
-                _buildInfoRow(theme, 'Email', merchant?.email ?? '--'),
+                _buildInfoRow(theme, 'Role', isMerchant ? 'Merchant' : 'Buyer'),
                 const Divider(height: 1),
                 _buildInfoRow(
                   theme,
@@ -247,6 +258,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
             const SizedBox(height: 24),
+
+            // ── Become a Merchant (only for buyers) ──
+            if (!isMerchant) ...[
+              _buildSectionHeader(theme, 'Upgrade', Icons.storefront),
+              const SizedBox(height: 12),
+              _buildCard(
+                theme,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Become a Merchant',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Accept payments, create invoices, and use the POS terminal.',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _businessNameController,
+                          decoration: const InputDecoration(
+                            hintText: 'Business Name',
+                            prefixIcon: Icon(Icons.storefront_outlined),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: ElevatedButton(
+                            onPressed: _upgradingToMerchant
+                                ? null
+                                : () => _onUpgradeToMerchant(auth),
+                            child: _upgradingToMerchant
+                                ? const SizedBox(
+                                    height: 24,
+                                    width: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text('Upgrade to Merchant'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+            ],
 
             // ── Wallet ──
             Row(
@@ -319,236 +389,270 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            // ── Payment Settings ──
-            _buildSectionHeader(theme, 'Payment Settings', Icons.tune),
-            const SizedBox(height: 12),
-            _buildCard(
-              theme,
-              children: [
-                SwitchListTile(
-                  title: Text(
-                    'Accept BCH',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  subtitle: Text(
-                    'Bitcoin Cash acceptance (always on)',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                  value: _bchAccepted,
-                  onChanged: null,
-                  activeTrackColor: AppTheme.bchGreen,
-                ),
                 const Divider(height: 1),
-                SwitchListTile(
-                  title: Text(
-                    'Accept CashTokens',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  subtitle: Text(
-                    'Accept fungible and NFT CashTokens',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                  value: _cashTokenAccepted,
-                  onChanged: (value) {
-                    setState(() => _cashTokenAccepted = value);
-                    _saveBool(AppConstants.cashTokenAcceptedKey, value);
-                  },
-                  activeTrackColor: AppTheme.bchGreen,
-                ),
-                const Divider(height: 1),
-                SwitchListTile(
-                  title: Text(
-                    'Accept 0-conf payments',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  subtitle: Text(
-                    'Accept payments before block confirmation',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                  value: _zeroConfEnabled,
-                  onChanged: (value) {
-                    setState(() => _zeroConfEnabled = value);
-                    auth.updateMerchant({'zero_conf_enabled': value});
-                  },
-                  activeTrackColor: AppTheme.bchGreen,
-                ),
-                const Divider(height: 1),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Minimum Payment Amount',
-                              style: theme.textTheme.bodyMedium,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Reject payments below this BCH amount',
-                              style: theme.textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      SizedBox(
-                        width: 120,
-                        child: TextField(
-                          controller: _minAmountController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true),
-                          style: theme.textTheme.bodyMedium,
-                          decoration: InputDecoration(
-                            suffixText: 'BCH',
-                            suffixStyle: theme.textTheme.bodySmall,
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 10),
+                // Back up Seed Phrase
+                InkWell(
+                  onTap: () => _showBackupSeedDialog(context),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.key, size: 20, color: AppTheme.bchGreen),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Back Up Seed Phrase',
+                                style: theme.textTheme.bodyMedium,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'View your 12-word recovery phrase',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ],
                           ),
-                          onSubmitted: (value) {
-                            final parsed = double.tryParse(value);
-                            if (parsed != null && parsed >= 0) {
-                              _saveDouble(
-                                  AppConstants.minimumAmountKey, parsed);
-                              _showSnackBar(
-                                  'Minimum amount updated to $value BCH');
-                            } else {
-                              _showSnackBar('Invalid amount', isError: true);
-                              _minAmountController.text =
-                                  AppConstants.defaultMinimumAmount.toString();
-                            }
-                          },
                         ),
-                      ),
-                    ],
+                        const Icon(Icons.chevron_right, size: 20),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 24),
 
-            // ── Loyalty Tokens Config ──
-            _buildSectionHeader(
-                theme, 'Loyalty Tokens', Icons.card_giftcard_outlined),
-            const SizedBox(height: 12),
-            _buildCard(
-              theme,
-              children: [
-                SwitchListTile(
-                  title: Text(
-                    'Enable Loyalty Token Issuance',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  subtitle: Text(
-                    'Issue CashTokens as loyalty rewards',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                  value: _loyaltyEnabled,
-                  onChanged: (value) {
-                    setState(() => _loyaltyEnabled = value);
-                    _saveBool(AppConstants.loyaltyEnabledKey, value);
-                  },
-                  activeTrackColor: AppTheme.bchGreen,
-                ),
-                if (_loyaltyEnabled) ...[
-                  const Divider(height: 1),
-                  _buildTextFieldRow(
-                    theme,
-                    label: 'Token Name',
-                    hint: 'e.g. Coffee Rewards',
-                    controller: _loyaltyTokenNameController,
-                    onChanged: (value) {
-                      _saveString(AppConstants.loyaltyTokenNameKey, value);
-                    },
+            // ── Payment Settings (merchant only) ──
+            if (isMerchant) ...[
+              _buildSectionHeader(theme, 'Payment Settings', Icons.tune),
+              const SizedBox(height: 12),
+              _buildCard(
+                theme,
+                children: [
+                  SwitchListTile(
+                    title: Text(
+                      'Accept BCH',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    subtitle: Text(
+                      'Bitcoin Cash acceptance (always on)',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    value: _bchAccepted,
+                    onChanged: null,
+                    activeTrackColor: AppTheme.bchGreen,
                   ),
                   const Divider(height: 1),
-                  _buildTextFieldRow(
-                    theme,
-                    label: 'Token Symbol',
-                    hint: 'e.g. COFFEE',
-                    controller: _loyaltyTokenSymbolController,
+                  SwitchListTile(
+                    title: Text(
+                      'Accept CashTokens',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    subtitle: Text(
+                      'Accept fungible and NFT CashTokens',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    value: _cashTokenAccepted,
                     onChanged: (value) {
-                      _saveString(AppConstants.loyaltyTokenSymbolKey, value);
+                      setState(() => _cashTokenAccepted = value);
+                      _saveBool(AppConstants.cashTokenAcceptedKey, value);
                     },
+                    activeTrackColor: AppTheme.bchGreen,
                   ),
                   const Divider(height: 1),
-                  _buildTextFieldRow(
-                    theme,
-                    label: 'Reward Rate',
-                    hint: 'Tokens per 1 BCH spent',
-                    controller: _loyaltyRewardRateController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
+                  SwitchListTile(
+                    title: Text(
+                      'Accept 0-conf payments',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    subtitle: Text(
+                      'Accept payments before block confirmation',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    value: _zeroConfEnabled,
                     onChanged: (value) {
-                      _saveString(AppConstants.loyaltyRewardRateKey, value);
+                      setState(() => _zeroConfEnabled = value);
+                      auth.updateMerchant({'zero_conf_enabled': value});
                     },
+                    activeTrackColor: AppTheme.bchGreen,
                   ),
                   const Divider(height: 1),
                   Padding(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 12),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 46,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          final name =
-                              _loyaltyTokenNameController.text.trim();
-                          final symbol =
-                              _loyaltyTokenSymbolController.text.trim();
-                          final rate =
-                              _loyaltyRewardRateController.text.trim();
-
-                          if (name.isEmpty ||
-                              symbol.isEmpty ||
-                              rate.isEmpty) {
-                            _showSnackBar(
-                                'Please fill in all loyalty token fields',
-                                isError: true);
-                            return;
-                          }
-
-                          final parsedRate = double.tryParse(rate);
-                          if (parsedRate == null || parsedRate <= 0) {
-                            _showSnackBar(
-                                'Reward rate must be a positive number',
-                                isError: true);
-                            return;
-                          }
-
-                          _showSnackBar(
-                              'Loyalty token "$name" ($symbol) creation initiated. '
-                              'This will be deployed on-chain shortly.');
-                        },
-                        icon: const Icon(Icons.rocket_launch, size: 18),
-                        label: Text(
-                          'Create Loyalty Token',
-                          style: GoogleFonts.inter(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Minimum Payment Amount',
+                                style: theme.textTheme.bodyMedium,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Reject payments below this BCH amount',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ],
                           ),
                         ),
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: Size.zero,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                        const SizedBox(width: 12),
+                        SizedBox(
+                          width: 120,
+                          child: TextField(
+                            controller: _minAmountController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            style: theme.textTheme.bodyMedium,
+                            decoration: InputDecoration(
+                              suffixText: 'BCH',
+                              suffixStyle: theme.textTheme.bodySmall,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
+                            ),
+                            onSubmitted: (value) {
+                              final parsed = double.tryParse(value);
+                              if (parsed != null && parsed >= 0) {
+                                _saveDouble(
+                                    AppConstants.minimumAmountKey, parsed);
+                                _showSnackBar(
+                                    'Minimum amount updated to $value BCH');
+                              } else {
+                                _showSnackBar('Invalid amount', isError: true);
+                                _minAmountController.text =
+                                    AppConstants.defaultMinimumAmount.toString();
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // ── Loyalty Tokens Config ──
+              _buildSectionHeader(
+                  theme, 'Loyalty Tokens', Icons.card_giftcard_outlined),
+              const SizedBox(height: 12),
+              _buildCard(
+                theme,
+                children: [
+                  SwitchListTile(
+                    title: Text(
+                      'Enable Loyalty Token Issuance',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    subtitle: Text(
+                      'Issue CashTokens as loyalty rewards',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    value: _loyaltyEnabled,
+                    onChanged: (value) {
+                      setState(() => _loyaltyEnabled = value);
+                      _saveBool(AppConstants.loyaltyEnabledKey, value);
+                    },
+                    activeTrackColor: AppTheme.bchGreen,
+                  ),
+                  if (_loyaltyEnabled) ...[
+                    const Divider(height: 1),
+                    _buildTextFieldRow(
+                      theme,
+                      label: 'Token Name',
+                      hint: 'e.g. Coffee Rewards',
+                      controller: _loyaltyTokenNameController,
+                      onChanged: (value) {
+                        _saveString(AppConstants.loyaltyTokenNameKey, value);
+                      },
+                    ),
+                    const Divider(height: 1),
+                    _buildTextFieldRow(
+                      theme,
+                      label: 'Token Symbol',
+                      hint: 'e.g. COFFEE',
+                      controller: _loyaltyTokenSymbolController,
+                      onChanged: (value) {
+                        _saveString(AppConstants.loyaltyTokenSymbolKey, value);
+                      },
+                    ),
+                    const Divider(height: 1),
+                    _buildTextFieldRow(
+                      theme,
+                      label: 'Reward Rate',
+                      hint: 'Tokens per 1 BCH spent',
+                      controller: _loyaltyRewardRateController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      onChanged: (value) {
+                        _saveString(AppConstants.loyaltyRewardRateKey, value);
+                      },
+                    ),
+                    const Divider(height: 1),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 46,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            final name =
+                                _loyaltyTokenNameController.text.trim();
+                            final symbol =
+                                _loyaltyTokenSymbolController.text.trim();
+                            final rate =
+                                _loyaltyRewardRateController.text.trim();
+
+                            if (name.isEmpty ||
+                                symbol.isEmpty ||
+                                rate.isEmpty) {
+                              _showSnackBar(
+                                  'Please fill in all loyalty token fields',
+                                  isError: true);
+                              return;
+                            }
+
+                            final parsedRate = double.tryParse(rate);
+                            if (parsedRate == null || parsedRate <= 0) {
+                              _showSnackBar(
+                                  'Reward rate must be a positive number',
+                                  isError: true);
+                              return;
+                            }
+
+                            _showSnackBar(
+                                'Loyalty token "$name" ($symbol) creation initiated. '
+                                'This will be deployed on-chain shortly.');
+                          },
+                          icon: const Icon(Icons.rocket_launch, size: 18),
+                          label: Text(
+                            'Create Loyalty Token',
+                            style: GoogleFonts.inter(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: Size.zero,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
+                  ],
                 ],
-              ],
-            ),
-            const SizedBox(height: 24),
+              ),
+              const SizedBox(height: 24),
+            ],
 
             // ── Notifications ──
             _buildSectionHeader(
@@ -674,223 +778,225 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 24),
 
-            // ── Integrations ──
-            _buildSectionHeader(theme, 'Integrations', Icons.webhook_outlined),
-            const SizedBox(height: 12),
-            _buildCard(
-              theme,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Webhook URL',
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Receive POST notifications for payment events',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _webhookUrlController,
-                              keyboardType: TextInputType.url,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                fontSize: 13,
-                              ),
-                              decoration: InputDecoration(
-                                hintText: 'https://yourserver.com/webhook',
-                                hintStyle:
-                                    theme.textTheme.bodySmall?.copyWith(
-                                  fontSize: 13,
-                                ),
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 10),
-                              ),
-                              onSubmitted: (value) {
-                                _saveString(
-                                    AppConstants.webhookUrlKey, value.trim());
-                                if (value.trim().isNotEmpty) {
-                                  _showSnackBar('Webhook URL saved');
-                                }
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            height: 40,
-                            child: OutlinedButton(
-                              onPressed: () {
-                                final url =
-                                    _webhookUrlController.text.trim();
-                                if (url.isEmpty) {
-                                  _showSnackBar(
-                                      'Enter a webhook URL first',
-                                      isError: true);
-                                  return;
-                                }
-                                if (!url.startsWith('http://') &&
-                                    !url.startsWith('https://')) {
-                                  _showSnackBar(
-                                      'URL must start with http:// or https://',
-                                      isError: true);
-                                  return;
-                                }
-                                _saveString(
-                                    AppConstants.webhookUrlKey, url);
-                                _showSnackBar(
-                                    'Test webhook sent to $url');
-                              },
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12),
-                                minimumSize: Size.zero,
-                                side: const BorderSide(
-                                    color: AppTheme.bchGreen),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                              child: Text(
-                                'Test',
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppTheme.bchGreen,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'API Key',
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Use this key to authenticate API requests',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: theme.inputDecorationTheme.fillColor,
-                          borderRadius: BorderRadius.circular(12),
+            // ── Integrations (merchant only) ──
+            if (isMerchant) ...[
+              _buildSectionHeader(theme, 'Integrations', Icons.webhook_outlined),
+              const SizedBox(height: 12),
+              _buildCard(
+                theme,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Webhook URL',
+                          style: theme.textTheme.bodyMedium,
                         ),
-                        child: Row(
+                        const SizedBox(height: 2),
+                        Text(
+                          'Receive POST notifications for payment events',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
                           children: [
                             Expanded(
-                              child: Text(
-                                _maskApiKey(_apiKey),
-                                style:
-                                    theme.textTheme.bodyMedium?.copyWith(
-                                  fontFamily: 'monospace',
-                                  fontSize: 12,
+                              child: TextField(
+                                controller: _webhookUrlController,
+                                keyboardType: TextInputType.url,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontSize: 13,
                                 ),
-                                overflow: TextOverflow.ellipsis,
+                                decoration: InputDecoration(
+                                  hintText: 'https://yourserver.com/webhook',
+                                  hintStyle:
+                                      theme.textTheme.bodySmall?.copyWith(
+                                    fontSize: 13,
+                                  ),
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 10),
+                                ),
+                                onSubmitted: (value) {
+                                  _saveString(
+                                      AppConstants.webhookUrlKey, value.trim());
+                                  if (value.trim().isNotEmpty) {
+                                    _showSnackBar('Webhook URL saved');
+                                  }
+                                },
                               ),
                             ),
                             const SizedBox(width: 8),
-                            InkWell(
-                              onTap: () {
-                                Clipboard.setData(
-                                    ClipboardData(text: _apiKey));
-                                _showSnackBar('API key copied to clipboard');
-                              },
-                              child: const Icon(Icons.copy, size: 18),
+                            SizedBox(
+                              height: 40,
+                              child: OutlinedButton(
+                                onPressed: () {
+                                  final url =
+                                      _webhookUrlController.text.trim();
+                                  if (url.isEmpty) {
+                                    _showSnackBar(
+                                        'Enter a webhook URL first',
+                                        isError: true);
+                                    return;
+                                  }
+                                  if (!url.startsWith('http://') &&
+                                      !url.startsWith('https://')) {
+                                    _showSnackBar(
+                                        'URL must start with http:// or https://',
+                                        isError: true);
+                                    return;
+                                  }
+                                  _saveString(
+                                      AppConstants.webhookUrlKey, url);
+                                  _showSnackBar(
+                                      'Test webhook sent to $url');
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12),
+                                  minimumSize: Size.zero,
+                                  side: const BorderSide(
+                                      color: AppTheme.bchGreen),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                                child: Text(
+                                  'Test',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.bchGreen,
+                                  ),
+                                ),
+                              ),
                             ),
                           ],
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 40,
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            showDialog(
-                              context: context,
-                              builder: (ctx) => AlertDialog(
-                                title: const Text('Regenerate API Key'),
-                                content: const Text(
-                                  'This will invalidate the current API key. '
-                                  'Any integrations using the old key will stop working. '
-                                  'Continue?',
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(ctx),
-                                    child: const Text('Cancel'),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'API Key',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Use this key to authenticate API requests',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: theme.inputDecorationTheme.fillColor,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _maskApiKey(_apiKey),
+                                  style:
+                                      theme.textTheme.bodyMedium?.copyWith(
+                                    fontFamily: 'monospace',
+                                    fontSize: 12,
                                   ),
-                                  TextButton(
-                                    onPressed: () {
-                                      Navigator.pop(ctx);
-                                      final newKey = _generateApiKey();
-                                      setState(() => _apiKey = newKey);
-                                      _saveString('api_key', newKey);
-                                      _showSnackBar(
-                                          'API key regenerated successfully');
-                                    },
-                                    child: Text(
-                                      'Regenerate',
-                                      style: GoogleFonts.inter(
-                                        color: AppTheme.warningOrange,
-                                        fontWeight: FontWeight.w600,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              InkWell(
+                                onTap: () {
+                                  Clipboard.setData(
+                                      ClipboardData(text: _apiKey));
+                                  _showSnackBar('API key copied to clipboard');
+                                },
+                                child: const Icon(Icons.copy, size: 18),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 40,
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('Regenerate API Key'),
+                                  content: const Text(
+                                    'This will invalidate the current API key. '
+                                    'Any integrations using the old key will stop working. '
+                                    'Continue?',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () {
+                                        Navigator.pop(ctx);
+                                        final newKey = _generateApiKey();
+                                        setState(() => _apiKey = newKey);
+                                        _saveString('api_key', newKey);
+                                        _showSnackBar(
+                                            'API key regenerated successfully');
+                                      },
+                                      child: Text(
+                                        'Regenerate',
+                                        style: GoogleFonts.inter(
+                                          color: AppTheme.warningOrange,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.refresh, size: 16),
+                            label: Text(
+                              'Regenerate Key',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
                               ),
-                            );
-                          },
-                          icon: const Icon(Icons.refresh, size: 16),
-                          label: Text(
-                            'Regenerate Key',
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
                             ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16),
-                            minimumSize: Size.zero,
-                            side: const BorderSide(
-                                color: AppTheme.warningOrange),
-                            foregroundColor: AppTheme.warningOrange,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16),
+                              minimumSize: Size.zero,
+                              side: const BorderSide(
+                                  color: AppTheme.warningOrange),
+                              foregroundColor: AppTheme.warningOrange,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
+                ],
+              ),
+              const SizedBox(height: 24),
+            ],
 
             // ── Data ──
             _buildSectionHeader(
@@ -1104,6 +1210,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // ── Merchant upgrade handler ──
+
+  Future<void> _onUpgradeToMerchant(AuthProvider auth) async {
+    final name = _businessNameController.text.trim();
+    if (name.isEmpty) {
+      _showSnackBar('Please enter a business name', isError: true);
+      return;
+    }
+
+    setState(() => _upgradingToMerchant = true);
+
+    final success = await auth.upgradeToMerchant(name);
+    if (mounted) {
+      setState(() => _upgradingToMerchant = false);
+      if (success) {
+        _showSnackBar('Upgraded to Merchant!');
+        _businessNameController.clear();
+      } else {
+        _showSnackBar(auth.errorMessage ?? 'Upgrade failed', isError: true);
+      }
+    }
+  }
+
   // ── Display currency handler ──
 
   void _onDisplayCurrencyChanged(String currency) {
@@ -1211,6 +1340,103 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // ── Dialogs ──
+
+  void _showBackupSeedDialog(BuildContext context) async {
+    final mnemonic =
+        await _secureStorage.read(key: AppConstants.seedPhraseKey);
+
+    if (!mounted) return;
+
+    if (mnemonic == null || mnemonic.isEmpty) {
+      _showSnackBar('No seed phrase found', isError: true);
+      return;
+    }
+
+    final words = mnemonic.split(' ');
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return AlertDialog(
+          title: const Text('Your Seed Phrase'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.warningOrange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber,
+                        color: AppTheme.warningOrange, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Never share your seed phrase. Anyone with these words can access your funds.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: AppTheme.warningOrange,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: theme.cardTheme.color,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: theme.dividerColor,
+                  ),
+                ),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (int i = 0; i < words.length; i++)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppTheme.bchGreen.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${i + 1}. ${words[i]}',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontFamily: 'monospace',
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: mnemonic));
+                _showSnackBar('Seed phrase copied');
+              },
+              child: const Text('Copy'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   void _showLogoutDialog(BuildContext context, AuthProvider auth) {
     showDialog(

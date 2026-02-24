@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
@@ -13,109 +12,84 @@ class ConnectWalletScreen extends StatefulWidget {
   State<ConnectWalletScreen> createState() => _ConnectWalletScreenState();
 }
 
-class _ConnectWalletScreenState extends State<ConnectWalletScreen> {
-  bool _showImport = false;
-  final _seedController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
+class _ConnectWalletScreenState extends State<ConnectWalletScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  final _signInFormKey = GlobalKey<FormState>();
+  final _signUpFormKey = GlobalKey<FormState>();
+  bool _obscurePassword = true;
+  bool _obscureConfirm = true;
 
-  static const String _paytacaDeepLink = 'paytaca://connect';
-  static const String _paytacaPlayStoreUrl =
-      'https://play.google.com/store/apps/details?id=com.paytaca.app';
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
 
   @override
   void dispose() {
-    _seedController.dispose();
+    _tabController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  Future<void> _onConnectPaytaca() async {
-    final deepLinkUri = Uri.parse(_paytacaDeepLink);
+  Future<void> _onSignIn() async {
+    if (!_signInFormKey.currentState!.validate()) return;
 
-    try {
-      final launched = await launchUrl(
-        deepLinkUri,
-        mode: LaunchMode.externalApplication,
+    final auth = context.read<AuthProvider>();
+    final success = await auth.login(
+      _emailController.text.trim(),
+      _passwordController.text,
+    );
+
+    if (!mounted) return;
+
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(auth.errorMessage ?? 'Login failed'),
+          backgroundColor: AppTheme.errorRed,
+        ),
       );
-
-      if (!launched) {
-        if (mounted) {
-          _showPaytacaInstallDialog();
-        }
-      }
-    } catch (_) {
-      if (mounted) {
-        _showPaytacaInstallDialog();
-      }
     }
+    // Router will handle navigation
   }
 
-  void _showPaytacaInstallDialog() {
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        final theme = Theme.of(dialogContext);
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppTheme.bchGreen.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.account_balance_wallet,
-                  color: AppTheme.bchGreen,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Paytaca Not Found',
-                  style: theme.textTheme.headlineSmall,
-                ),
-              ),
-            ],
-          ),
-          content: Text(
-            'Paytaca wallet does not appear to be installed on this device. Would you like to install it from the Play Store?',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              height: 1.5,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(
-                'Cancel',
-                style: GoogleFonts.inter(
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.of(dialogContext).pop();
-                final playStoreUri = Uri.parse(_paytacaPlayStoreUrl);
-                await launchUrl(
-                  playStoreUri,
-                  mode: LaunchMode.externalApplication,
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(0, 44),
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-              ),
-              child: const Text('Install Paytaca'),
-            ),
-          ],
-        );
-      },
+  Future<void> _onSignUp() async {
+    if (!_signUpFormKey.currentState!.validate()) return;
+
+    if (_passwordController.text != _confirmPasswordController.text) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Passwords do not match'),
+          backgroundColor: AppTheme.errorRed,
+        ),
+      );
+      return;
+    }
+
+    final auth = context.read<AuthProvider>();
+    final success = await auth.register(
+      _emailController.text.trim(),
+      _passwordController.text,
     );
+
+    if (!mounted) return;
+
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(auth.errorMessage ?? 'Registration failed'),
+          backgroundColor: AppTheme.errorRed,
+        ),
+      );
+    }
+    // Router will handle navigation
   }
 
   @override
@@ -125,11 +99,11 @@ class _ConnectWalletScreenState extends State<ConnectWalletScreen> {
 
     return Scaffold(
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 28),
           child: Column(
             children: [
-              const Spacer(flex: 2),
+              const SizedBox(height: 60),
 
               // Logo
               Image.asset(
@@ -143,14 +117,15 @@ class _ConnectWalletScreenState extends State<ConnectWalletScreen> {
                     color: AppTheme.bchGreen.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.currency_bitcoin, size: 56, color: AppTheme.bchGreen),
+                  child: const Icon(Icons.currency_bitcoin,
+                      size: 56, color: AppTheme.bchGreen),
                 ),
               ),
               const SizedBox(height: 28),
 
               // Title
               Text(
-                'BCH Pay',
+                'CashTap',
                 style: GoogleFonts.inter(
                   fontSize: 36,
                   fontWeight: FontWeight.w700,
@@ -159,7 +134,7 @@ class _ConnectWalletScreenState extends State<ConnectWalletScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Accept Bitcoin Cash payments\ninstantly at your business',
+                'Bitcoin Cash payments\nmade simple',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyLarge?.copyWith(
                   color: theme.textTheme.bodySmall?.color,
@@ -167,7 +142,38 @@ class _ConnectWalletScreenState extends State<ConnectWalletScreen> {
                 ),
               ),
 
-              const Spacer(flex: 2),
+              const SizedBox(height: 32),
+
+              // Tab bar
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: theme.cardTheme.color,
+                ),
+                child: TabBar(
+                  controller: _tabController,
+                  indicator: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    color: AppTheme.bchGreen,
+                  ),
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: theme.textTheme.bodySmall?.color,
+                  labelStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                  tabs: const [
+                    Tab(text: 'Sign In'),
+                    Tab(text: 'Sign Up'),
+                  ],
+                  onTap: (_) {
+                    // Clear fields when switching tabs
+                    _emailController.clear();
+                    _passwordController.clear();
+                    _confirmPasswordController.clear();
+                  },
+                ),
+              ),
+
+              const SizedBox(height: 24),
 
               // Error message
               if (auth.errorMessage != null) ...[
@@ -196,135 +202,170 @@ class _ConnectWalletScreenState extends State<ConnectWalletScreen> {
                 const SizedBox(height: 16),
               ],
 
-              // Import seed phrase section
-              if (_showImport) ...[
-                Form(
-                  key: _formKey,
-                  child: TextFormField(
-                    controller: _seedController,
-                    maxLines: 3,
-                    decoration: InputDecoration(
-                      hintText: 'Enter your 12-word seed phrase...',
-                      hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.textTheme.bodySmall?.color,
+              // Tab content
+              SizedBox(
+                height: 320,
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    // Sign In
+                    Form(
+                      key: _signInFormKey,
+                      child: Column(
+                        children: [
+                          TextFormField(
+                            controller: _emailController,
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: const InputDecoration(
+                              hintText: 'Email',
+                              prefixIcon: Icon(Icons.email_outlined),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Email is required';
+                              }
+                              if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
+                                  .hasMatch(value)) {
+                                return 'Enter a valid email';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _passwordController,
+                            obscureText: _obscurePassword,
+                            decoration: InputDecoration(
+                              hintText: 'Password',
+                              prefixIcon: const Icon(Icons.lock_outlined),
+                              suffixIcon: IconButton(
+                                icon: Icon(_obscurePassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility),
+                                onPressed: () => setState(
+                                    () => _obscurePassword = !_obscurePassword),
+                              ),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Password is required';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton(
+                            onPressed: auth.isLoading ? null : _onSignIn,
+                            child: auth.isLoading
+                                ? const SizedBox(
+                                    height: 24,
+                                    width: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text('Sign In'),
+                          ),
+                        ],
                       ),
                     ),
-                    style: theme.textTheme.bodyMedium,
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Please enter your seed phrase';
-                      }
-                      final words = value.trim().split(RegExp(r'\s+'));
-                      if (words.length != 12 && words.length != 24) {
-                        return 'Seed phrase must be 12 or 24 words';
-                      }
-                      return null;
-                    },
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: auth.isLoading
-                      ? null
-                      : () async {
-                          if (_formKey.currentState!.validate()) {
-                            await auth
-                                .importWallet(_seedController.text.trim());
-                          }
-                        },
-                  child: auth.isLoading
-                      ? const SizedBox(
-                          height: 24,
-                          width: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: Colors.white,
+                    // Sign Up
+                    Form(
+                      key: _signUpFormKey,
+                      child: Column(
+                        children: [
+                          TextFormField(
+                            controller: _emailController,
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: const InputDecoration(
+                              hintText: 'Email',
+                              prefixIcon: Icon(Icons.email_outlined),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Email is required';
+                              }
+                              if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
+                                  .hasMatch(value)) {
+                                return 'Enter a valid email';
+                              }
+                              return null;
+                            },
                           ),
-                        )
-                      : const Text('Import Wallet'),
-                ),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: () => setState(() => _showImport = false),
-                  child: const Text('Back'),
-                ),
-              ] else ...[
-                // Create new wallet
-                ElevatedButton(
-                  onPressed: auth.isLoading
-                      ? null
-                      : () async {
-                          await auth.createWallet();
-                        },
-                  child: auth.isLoading
-                      ? const SizedBox(
-                          height: 24,
-                          width: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: Colors.white,
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _passwordController,
+                            obscureText: _obscurePassword,
+                            decoration: InputDecoration(
+                              hintText: 'Password (min 8 characters)',
+                              prefixIcon: const Icon(Icons.lock_outlined),
+                              suffixIcon: IconButton(
+                                icon: Icon(_obscurePassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility),
+                                onPressed: () => setState(
+                                    () => _obscurePassword = !_obscurePassword),
+                              ),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Password is required';
+                              }
+                              if (value.length < 8) {
+                                return 'Password must be at least 8 characters';
+                              }
+                              return null;
+                            },
                           ),
-                        )
-                      : const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.add_circle_outline, size: 22),
-                            SizedBox(width: 10),
-                            Text('Create New Wallet'),
-                          ],
-                        ),
-                ),
-                const SizedBox(height: 14),
-
-                // Import wallet
-                OutlinedButton(
-                  onPressed: auth.isLoading
-                      ? null
-                      : () => setState(() => _showImport = true),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.download_outlined, size: 22),
-                      SizedBox(width: 10),
-                      Text('Import Wallet'),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // Connect Paytaca
-                OutlinedButton(
-                  onPressed: auth.isLoading ? null : _onConnectPaytaca,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: theme.textTheme.bodyLarge?.color,
-                    side: BorderSide(
-                      color: theme.dividerColor,
-                      width: 1.5,
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _confirmPasswordController,
+                            obscureText: _obscureConfirm,
+                            decoration: InputDecoration(
+                              hintText: 'Confirm password',
+                              prefixIcon: const Icon(Icons.lock_outlined),
+                              suffixIcon: IconButton(
+                                icon: Icon(_obscureConfirm
+                                    ? Icons.visibility_off
+                                    : Icons.visibility),
+                                onPressed: () => setState(
+                                    () => _obscureConfirm = !_obscureConfirm),
+                              ),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please confirm your password';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton(
+                            onPressed: auth.isLoading ? null : _onSignUp,
+                            child: auth.isLoading
+                                ? const SizedBox(
+                                    height: 24,
+                                    width: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text('Create Account'),
+                          ),
+                        ],
+                      ),
                     ),
-                    minimumSize: const Size(double.infinity, 56),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.account_balance_wallet_outlined, size: 22),
-                      SizedBox(width: 10),
-                      Text('Connect Paytaca'),
-                    ],
-                  ),
+                  ],
                 ),
-              ],
+              ),
 
-              const Spacer(flex: 1),
-
-              // Footer
+              const SizedBox(height: 16),
               Text(
-                'Your keys, your coins. Self-custodial.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontSize: 12,
-                ),
+                'Your wallet is auto-created during setup. Keys stay on your device.',
+                style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
+                textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
             ],
