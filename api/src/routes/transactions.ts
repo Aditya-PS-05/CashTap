@@ -423,19 +423,49 @@ transactions.post("/", authMiddleware, async (c) => {
     return c.json({ transaction: serializeTransaction(existing) });
   }
 
+  // Check if recipient_address belongs to a payment link (i.e. buyer paying a seller)
+  const paymentLink = await prisma.paymentLink.findFirst({
+    where: {
+      payment_address: recipient_address,
+      status: "ACTIVE",
+    },
+  });
+
+  // If paying to a payment link, record the transaction under the SELLER's merchant_id
+  const effectiveMerchantId = paymentLink?.merchant_id || merchantId;
+  const effectivePaymentLinkId = paymentLink?.id || payment_link_id || null;
+
   const transaction = await prisma.transaction.create({
     data: {
       tx_hash,
-      merchant_id: merchantId,
+      merchant_id: effectiveMerchantId,
       sender_address,
       recipient_address,
       amount_satoshis: BigInt(amount_satoshis),
-      payment_link_id: payment_link_id || null,
+      payment_link_id: effectivePaymentLinkId,
       invoice_id: invoice_id || null,
       usd_rate_at_time: usd_rate_at_time ?? null,
       status: "PENDING",
     },
   });
+
+  // Update payment link status if it's a SINGLE-use link
+  if (paymentLink) {
+    if (paymentLink.type === "SINGLE") {
+      await prisma.paymentLink.update({
+        where: { id: paymentLink.id },
+        data: { status: "INACTIVE" },
+      });
+    } else if (paymentLink.type === "RECURRING") {
+      await prisma.paymentLink.update({
+        where: { id: paymentLink.id },
+        data: {
+          recurring_count: { increment: 1 },
+          last_paid_at: new Date(),
+        },
+      });
+    }
+  }
 
   return c.json({ transaction: serializeTransaction(transaction) }, 201);
 });

@@ -11,6 +11,10 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: "CashTap — Bitcoin Cash Payment Rails",
   description: "Accept Bitcoin Cash payments with mobile POS, payment links, invoices, and CashToken loyalty rewards.",
+  icons: {
+    icon: "/images/bch_coin_icon.png",
+    apple: "/images/bch_coin_icon.png",
+  },
   openGraph: {
     title: "CashTap — Bitcoin Cash Payment Rails",
     description: "Accept Bitcoin Cash payments with mobile POS, payment links, invoices, and CashToken loyalty rewards.",
