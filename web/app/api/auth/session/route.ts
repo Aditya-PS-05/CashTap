@@ -12,6 +12,7 @@ const COOKIE_OPTS = {
 export async function GET() {
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("bch_access_token")?.value;
+  const refreshToken = cookieStore.get("bch_refresh_token")?.value;
   const email = cookieStore.get("bch_email")?.value;
 
   if (!accessToken || !email) {
@@ -19,7 +20,7 @@ export async function GET() {
   }
 
   const role = cookieStore.get("bch_role")?.value || null;
-  return NextResponse.json({ authenticated: true, accessToken, email, role });
+  return NextResponse.json({ authenticated: true, accessToken, refreshToken, email, role });
 }
 
 export async function POST(request: Request) {

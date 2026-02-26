@@ -207,6 +207,10 @@ class ApiService {
     }
   }
 
+  Future<void> deletePaymentLink(String id) async {
+    await _dio.delete('/api/payment-links/$id');
+  }
+
   Future<PaymentLink> getPaymentLinkStatus(String slug) async {
     final response = await _dio.get('/api/payment-links/$slug');
     final data = response.data as Map<String, dynamic>;

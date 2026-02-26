@@ -10,9 +10,18 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { Copy, ExternalLink, Check } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Copy, ExternalLink, Check, Trash2, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3456";
 
 interface PaymentLink {
   id: string;
@@ -40,12 +49,16 @@ export function PaymentLinkDetail({
   link,
   open,
   onOpenChange,
+  onDeactivated,
 }: {
   link: PaymentLink | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onDeactivated?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   if (!link) return null;
 
@@ -146,7 +159,69 @@ export function PaymentLinkDetail({
               <ExternalLink className="h-4 w-4" /> Open Payment Page
             </a>
           </Button>
+
+          {link.status === "ACTIVE" && (
+            <Button
+              variant="destructive"
+              className="w-full gap-2"
+              disabled={deactivating}
+              onClick={() => setShowConfirm(true)}
+            >
+              {deactivating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Deactivate Link
+            </Button>
+          )}
         </div>
+
+        {/* Deactivate Confirmation */}
+        <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Deactivate Payment Link</DialogTitle>
+              <DialogDescription>
+                This link will stop accepting payments. You can&apos;t undo this action.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="outline" onClick={() => setShowConfirm(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={deactivating}
+                onClick={async () => {
+                  setDeactivating(true);
+                  setShowConfirm(false);
+                  try {
+                    const sessionRes = await fetch("/api/auth/session");
+                    const sessionData = await sessionRes.json();
+                    const headers: Record<string, string> = {};
+                    if (sessionData.accessToken) {
+                      headers["Authorization"] = `Bearer ${sessionData.accessToken}`;
+                    }
+                    const res = await fetch(`${API_BASE}/api/payment-links/${link.id}`, {
+                      method: "DELETE",
+                      headers,
+                    });
+                    if (res.ok) {
+                      toast.success("Payment link deactivated");
+                      onOpenChange(false);
+                      onDeactivated?.();
+                    } else {
+                      toast.error("Failed to deactivate");
+                    }
+                  } catch {
+                    toast.error("Failed to deactivate");
+                  } finally {
+                    setDeactivating(false);
+                  }
+                }}
+              >
+                Deactivate
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </SheetContent>
     </Sheet>
   );

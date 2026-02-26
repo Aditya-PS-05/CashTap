@@ -21,7 +21,7 @@ import {
   DialogTrigger,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Plus, Copy, QrCode, ExternalLink, Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Copy, QrCode, ExternalLink, Loader2, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { PaymentLinkDetail } from "@/components/payment-link-detail";
@@ -134,6 +134,32 @@ export default function PaymentLinksPage() {
   useEffect(() => {
     fetchLinks();
   }, [fetchLinks]);
+
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [confirmDeactivate, setConfirmDeactivate] = useState<string | null>(null);
+
+  const deactivateLink = async (id: string) => {
+    setDeleting(id);
+    setConfirmDeactivate(null);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${API_BASE}/api/payment-links/${id}`, {
+        method: "DELETE",
+        headers,
+      });
+      if (res.ok) {
+        toast.success("Payment link deactivated");
+        fetchLinks();
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Failed to deactivate");
+      }
+    } catch {
+      toast.error("Failed to deactivate payment link");
+    } finally {
+      setDeleting(null);
+    }
+  };
 
   const copyLink = (slug: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -513,6 +539,21 @@ export default function PaymentLinksPage() {
                                   <ExternalLink className="h-3.5 w-3.5" />
                                 </a>
                               </Button>
+                              {link.status === "ACTIVE" && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-destructive hover:text-destructive"
+                                  disabled={deleting === link.id}
+                                  onClick={(e) => { e.stopPropagation(); setConfirmDeactivate(link.id); }}
+                                >
+                                  {deleting === link.id ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  )}
+                                </Button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -569,8 +610,31 @@ export default function PaymentLinksPage() {
       </Card>
 
       {selectedLink && (
-        <PaymentLinkDetail link={adaptForDetail(selectedLink)} open={detailOpen} onOpenChange={setDetailOpen} />
+        <PaymentLinkDetail link={adaptForDetail(selectedLink)} open={detailOpen} onOpenChange={setDetailOpen} onDeactivated={fetchLinks} />
       )}
+
+      {/* Deactivate Confirmation Dialog */}
+      <Dialog open={!!confirmDeactivate} onOpenChange={(open) => { if (!open) setConfirmDeactivate(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Deactivate Payment Link</DialogTitle>
+            <DialogDescription>
+              This link will stop accepting payments. You can&apos;t undo this action.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="outline" onClick={() => setConfirmDeactivate(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => confirmDeactivate && deactivateLink(confirmDeactivate)}
+            >
+              Deactivate
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

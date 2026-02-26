@@ -50,43 +50,88 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function checkSession() {
     try {
       const res = await fetch("/api/auth/session", { credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.email) {
-          // Fetch user profile
-          const profileRes = await fetch(`${API_BASE}/api/merchants/me`, {
-            headers: { Authorization: `Bearer ${data.accessToken}` },
-          });
-          const profileData = profileRes.ok ? await profileRes.json() : null;
-          const merchant = profileData?.merchant;
+      if (!res.ok) {
+        setState((s) => ({ ...s, isLoading: false }));
+        return;
+      }
 
-          const role = data.role || merchant?.role || null;
-          const user: User = merchant
-            ? {
-                id: merchant.id,
-                email: merchant.email,
-                bch_address: merchant.bch_address,
-                merchant_address: merchant.merchant_address,
-                business_name: merchant.business_name,
-                role: merchant.role,
-                encrypted_wallet: merchant.encrypted_wallet,
-              }
-            : { id: "", email: data.email, role: role || "BUYER" };
+      let data = await res.json();
+      if (!data.email) {
+        setState((s) => ({ ...s, isLoading: false }));
+        return;
+      }
 
-          setState({
-            isAuthenticated: true,
-            isLoading: false,
-            user,
-            address: merchant?.bch_address || null,
-            role,
+      // Try fetching profile with the current access token
+      let profileRes = await fetch(`${API_BASE}/api/merchants/me`, {
+        headers: { Authorization: `Bearer ${data.accessToken}` },
+      });
+
+      // If 401 and we have a refresh token, try refreshing
+      if (profileRes.status === 401 && data.refreshToken) {
+        try {
+          const refreshRes = await fetch(`${API_BASE}/api/auth/refresh`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refresh_token: data.refreshToken }),
           });
+
+          if (refreshRes.ok) {
+            const refreshData = await refreshRes.json();
+            // Update session cookies with new tokens
+            await fetch("/api/auth/session", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                accessToken: refreshData.access_token,
+                refreshToken: refreshData.refresh_token,
+                email: data.email,
+                role: data.role,
+              }),
+            });
+
+            // Retry profile fetch with new token
+            profileRes = await fetch(`${API_BASE}/api/merchants/me`, {
+              headers: { Authorization: `Bearer ${refreshData.access_token}` },
+            });
+          } else {
+            // Refresh failed — clear session and treat as logged out
+            await fetch("/api/auth/session", { method: "DELETE" });
+            setState((s) => ({ ...s, isLoading: false }));
+            return;
+          }
+        } catch {
+          await fetch("/api/auth/session", { method: "DELETE" });
+          setState((s) => ({ ...s, isLoading: false }));
           return;
         }
       }
+
+      const profileData = profileRes.ok ? await profileRes.json() : null;
+      const merchant = profileData?.merchant;
+
+      const role = data.role || merchant?.role || null;
+      const user: User = merchant
+        ? {
+            id: merchant.id,
+            email: merchant.email,
+            bch_address: merchant.bch_address,
+            merchant_address: merchant.merchant_address,
+            business_name: merchant.business_name,
+            role: merchant.role,
+            encrypted_wallet: merchant.encrypted_wallet,
+          }
+        : { id: "", email: data.email, role: role || "BUYER" };
+
+      setState({
+        isAuthenticated: true,
+        isLoading: false,
+        user,
+        address: merchant?.bch_address || null,
+        role,
+      });
     } catch {
-      // Session check failed, not authenticated
+      setState((s) => ({ ...s, isLoading: false }));
     }
-    setState((s) => ({ ...s, isLoading: false }));
   }
 
   const register = useCallback(async (email: string, password: string) => {

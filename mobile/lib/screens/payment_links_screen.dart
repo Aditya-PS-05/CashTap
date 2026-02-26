@@ -512,6 +512,43 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
     );
   }
 
+  Future<void> _deactivateLink(PaymentLink link) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Deactivate Link'),
+        content: const Text('This payment link will no longer accept payments. Continue?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Deactivate'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _apiService.deletePaymentLink(link.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Payment link deactivated')),
+        );
+      }
+      _fetchLinks();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to deactivate: $e')),
+        );
+      }
+    }
+  }
+
   Widget _buildLinkCard(ThemeData theme, PaymentLink link) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -522,13 +559,15 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
           if (link.isRecurring) {
             _showRecurringDetail(link);
           } else {
-            // Copy payment link
             Clipboard.setData(ClipboardData(text: link.slug));
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Payment link slug copied!')),
             );
           }
         },
+        onLongPress: link.status == PaymentLinkStatus.active
+            ? () => _deactivateLink(link)
+            : null,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -642,6 +681,26 @@ class _PaymentLinksScreenState extends State<PaymentLinksScreen> {
                   ),
                 ],
               ),
+              if (link.status == PaymentLinkStatus.active) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  height: 36,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _deactivateLink(link),
+                    icon: const Icon(Icons.block, size: 16),
+                    label: const Text('Deactivate'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red, width: 0.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      textStyle: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
